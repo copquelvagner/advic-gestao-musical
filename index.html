@@ -107,6 +107,27 @@
 const SUPABASE_URL = "https://jvcrmdzwaiufjumjqtwu.supabase.co";
     const SUPABASE_KEY = "sb_publishable_PPkCcPkHpVshgAlnZShwvg__a4zSMPm";
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-</script>
+document.getElementById("form-login").addEventListener("submit", async function(event) {
+  event.preventDefault();
+
+  const email = document.getElementById("email").value;
+  const senha = document.getElementById("senha").value;
+  const mensagem = document.getElementById("mensagem-login");
+
+  mensagem.textContent = "Verificando acesso...";
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: email,
+    password: senha
+  });
+
+  if (error) {
+    mensagem.textContent = "Não foi possível entrar. Verifique seu e-mail e senha.";
+    return;
+  }
+
+  mensagem.textContent = "Login realizado com sucesso!";
+});
+  </script>
 </body>
 </html>
