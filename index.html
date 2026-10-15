@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADVIC Gestão Musical</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f2f5f9;
+      color: #17243b;
+    }
+
+    header {
+      background: #142b4d;
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+    }
+
+    header h1 { margin: 0 0 10px; }
+
+    main {
+      max-width: 950px;
+      margin: 35px auto;
+      padding: 0 20px;
+    }
+
+    .painel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+    }
+
+    .cartao {
+      background: white;
+      border-radius: 12px;
+      padding: 25px;
+      box-shadow: 0 3px 12px #00000012;
+    }
+
+    .cartao h2 { margin-top: 0; }
+
+    .cartao p { line-height: 1.5; }
+
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: #607086;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ADVIC Gestão Musical</h1>
+    <p>Organização musical da igreja</p>
+  </header>
+
+  <main>
+    <h2>Painel de Gestão Musical</h2>
+    <div class="painel">
+      <section class="cartao">
+        <h2>Calendário de Cultos</h2>
+        <p>Consulte as datas e os horários dos cultos.</p>
+      </section>
+
+      <section class="cartao">
+        <h2>Escala da Banda</h2>
+        <p>Organize os músicos de cada culto.</p>
+      </section>
+
+      <section class="cartao">
+        <h2>Escala do Vocal</h2>
+        <p>Organize os cantores de cada culto.</p>
+      </section>
+
+      <section class="cartao">
+        <h2>Controle de Presença</h2>
+        <p>Acompanhe a participação dos integrantes.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer>ADVIC - Ministério Vinde a Ceifa</footer>
+</body>
+</html>
