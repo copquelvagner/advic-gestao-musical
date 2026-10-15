@@ -129,5 +129,51 @@ document.getElementById("form-login").addEventListener("submit", async function(
   mensagem.textContent = "Login realizado com sucesso!";
 });
   </script>
-</body>
+<section id="recuperar-senha" class="cartao" style="display:none; max-width:500px; margin:20px auto;">
+  <h2>Cadastrar nova senha</h2>
+  <p>Digite sua nova senha para acessar o sistema.</p>
+
+  <form id="form-nova-senha">
+    <label for="nova-senha">Nova senha</label>
+    <input type="password" id="nova-senha" minlength="8" required>
+
+    <button type="submit">Salvar nova senha</button>
+  </form>
+
+  <p id="mensagem-nova-senha" role="status"></p>
+</section>
+<script>
+  const areaRecuperacao = document.getElementById("recuperar-senha");
+  const formularioNovaSenha = document.getElementById("form-nova-senha");
+  const mensagemNovaSenha = document.getElementById("mensagem-nova-senha");
+
+  supabaseClient.auth.onAuthStateChange((evento) => {
+    if (evento === "PASSWORD_RECOVERY") {
+      areaRecuperacao.style.display = "block";
+      areaRecuperacao.scrollIntoView();
+    }
+  });
+
+  formularioNovaSenha.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const novaSenha = document.getElementById("nova-senha").value;
+    mensagemNovaSenha.textContent = "Salvando nova senha...";
+
+    const { error } = await supabaseClient.auth.updateUser({
+      password: novaSenha
+    });
+
+    if (error) {
+      mensagemNovaSenha.textContent = "Não foi possível alterar a senha. Solicite um novo link de recuperação.";
+      return;
+    }
+
+    mensagemNovaSenha.textContent = "Senha alterada com sucesso! Agora você pode entrar no sistema.";
+    formularioNovaSenha.reset();
+    areaRecuperacao.style.display = "none";
+    await supabaseClient.auth.signOut();
+    window.history.replaceState({}, document.title, window.location.pathname);
+  });
+</script></body>
 </html>
