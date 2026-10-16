@@ -279,7 +279,8 @@ async function carregarEscalaBanda() {
   const { data, error } = await supabaseClient
     .from('escalas')
     .select('*')
-    .limit(20);
+    .neq('instrumento', 'Voz')
+.limit(20);
 
   if (error) {
     console.error('Erro ao carregar escala:', error);
