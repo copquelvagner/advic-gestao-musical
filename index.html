@@ -359,10 +359,10 @@
         musicosBanda = (resMusicos.data || []).filter(m =>
           m.ativo !== false &&
           !/^(vocal|voz)$/i.test(String(m.departamento || '').trim()) &&
-          !/^(voz|vocal)$/i.test(String(m.instrumento || '').trim())
+          !/^(voz|vocal)$/i.test(String(m.instrumento_principal || '').trim())
         );
         musicosBanda.forEach(m => seletorMusico.add(new Option(
-          `${m.nome} - ${m.instrumento || 'Instrumento não informado'}`, m.id
+          `${m.nome} - ${m.instrumento_principal || 'Instrumento não informado'}`, m.id
         )));
         mensagem.textContent = !resCultos.data?.length ? 'Não há cultos cadastrados.' :
           !musicosBanda.length ? 'Não há músicos disponíveis para a Banda.' : '';
@@ -390,7 +390,7 @@
         return;
       }
       const musico = musicosBanda.find(m => String(m.id) === musicoId);
-      if (!musico || !musico.instrumento) {
+      if (!musico || !musico.instrumento_principal) {
         mensagem.textContent = 'O músico selecionado precisa ter um instrumento cadastrado.';
         return;
       }
@@ -400,7 +400,7 @@
         const registro = {
           culto_id: cultoId,
           musico_id: musicoId,
-          instrumento: musico.instrumento
+          instrumento: musico.instrumento_principal
         };
         // Aproveita o identificador do departamento se existir no cadastro do músico.
         if (musico.departamento_id != null) registro.departamento_id = musico.departamento_id;
