@@ -47,6 +47,22 @@
   <h2>Escala da Banda</h2>
   <p>Organize os músicos de cada culto.</p>
   <div id="lista-escala-banda">Carregando escala...</div>
+        <button type="button" id="btn-cadastrar-banda">
+          <div id="formulario-escala-banda" hidden>
+  <h3>Nova escala da Banda</h3>
+  <label for="culto-banda">Culto</label>
+  <select id="culto-banda"></select>
+
+  <label for="musico-banda">Músico</label>
+  <select id="musico-banda"></select>
+
+  <button type="button" id="btn-salvar-banda">
+    Salvar escala
+  </button>
+  <p id="mensagem-escala-banda"></p>
+</div>
+  Cadastrar na Escala
+</button>
 </section>
      <section class="cartao">
   <h2>Escala do Vocal</h2>
@@ -343,6 +359,17 @@ async function carregarEscalaVocal() {
     lista.appendChild(item);
   });
 }
+      });
+}
+
+document.getElementById('btn-cadastrar-banda').addEventListener('click', () => {
+  const formulario = document.getElementById('formulario-escala-banda');
+  formulario.hidden = !formulario.hidden;
+});
+
+</script>
+</body>
+</html>
   </script>
 </body>
 </html>
