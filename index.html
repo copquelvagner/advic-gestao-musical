@@ -282,7 +282,7 @@
       lista.textContent = 'Carregando escala...';
       const { data, error } = await supabaseClient
         .from('escalas')
-        .select('*')
+        .select('*, musicos(nome)')      
         .neq('instrumento', 'Voz')
         .limit(20);
       if (error) {
@@ -297,7 +297,7 @@
       }
       data.forEach(escala => {
         const item = document.createElement('p');
-        item.textContent = `Instrumento: ${escala.instrumento || 'Não informado'}`;
+        item.textContent = `${escala.musicos?.nome || 'Músico não identificado'} - ${escala.instrumento || 'Instrumento não informado'}`;
         lista.appendChild(item);
       });
     }
