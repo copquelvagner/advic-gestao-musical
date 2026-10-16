@@ -43,7 +43,11 @@
   <div id="lista-cultos">Carregando calendário...</div>
 </section>
 
-      <section class="cartao"><h2>Escala da Banda</h2><p>Organize os músicos de cada culto.</p></section>
+      <section class="cartao">
+  <h2>Escala da Banda</h2>
+  <p>Organize os músicos de cada culto.</p>
+  <div id="lista-escala-banda">Carregando escala...</div>
+</section>
       <section class="cartao"><h2>Escala do Vocal</h2><p>Organize os cantores de cada culto.</p></section>
       <section class="cartao"><h2>Controle de Presença</h2><p>Acompanhe a participação dos integrantes.</p></section>
     </div>
@@ -123,6 +127,7 @@
         el('usuario-atual').textContent = `Conectado como: ${data.session.user.email || 'usuário'}`;
         mostrar('painel-gestao');
         await carregarCultos();
+        await carregarEscalaBanda();
       } else {
         mostrar('area-login');
       }
@@ -142,6 +147,7 @@
           el('usuario-atual').textContent = `Conectado como: ${sessao.user.email || 'usuário'}`;
           mostrar('painel-gestao');
           carregarCultos();
+          carregarEscalaBanda();
         } else {
           mostrar('area-login');
         }
@@ -264,6 +270,25 @@ async function carregarCultos() {
     lista.appendChild(item);
   });
 }
- </script>
+async function carregarEscalaBanda() {
+  const lista = document.getElementById('lista-escala-banda');
+  if (!lista) return;
+
+  lista.textContent = 'Carregando escala...';
+
+  const { data, error } = await supabaseClient
+    .from('escalas')
+    .select('*')
+    .limit(20);
+
+  if (error) {
+    console.error('Erro ao carregar escala:', error);
+    lista.textContent = 'Não foi possível carregar a escala.';
+    return;
+  }
+
+  lista.textContent = `${data.length} registro(s) de escala encontrado(s).`;
+}
+  </script>
 </body>
 </html>
