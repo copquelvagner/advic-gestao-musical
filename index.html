@@ -296,7 +296,7 @@ if (!data || data.length === 0) {
 
 data.forEach(escala => {
   const item = document.createElement('p');
-  item.textContent = `Escala: ${JSON.stringify(escala)}`;
+ item.textContent = `Instrumento: ${escala.instrumento || 'Não informado'}`;
   lista.appendChild(item);
 });
 }
