@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -7,51 +6,23 @@
   <title>ADVIC Gestão Musical</title>
   <style>
     * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f2f5f9;
-      color: #17243b;
-    }
-
-    header {
-      background: #142b4d;
-      color: white;
-      padding: 30px 20px;
-      text-align: center;
-    }
-
+    body { margin: 0; font-family: Arial, sans-serif; background: #f2f5f9; color: #17243b; }
+    header { background: #142b4d; color: white; padding: 30px 20px; text-align: center; }
     header h1 { margin: 0 0 10px; }
-
-    main {
-      max-width: 950px;
-      margin: 35px auto;
-      padding: 0 20px;
-    }
-
-    .painel {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 18px;
-    }
-
-    .cartao {
-      background: white;
-      border-radius: 12px;
-      padding: 25px;
-      box-shadow: 0 3px 12px #00000012;
-    }
-
+    main { max-width: 950px; margin: 35px auto; padding: 0 20px; }
+    .painel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+    .cartao { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 3px 12px #00000012; }
     .cartao h2 { margin-top: 0; }
-
     .cartao p { line-height: 1.5; }
-
-    footer {
-      text-align: center;
-      padding: 25px;
-      color: #607086;
-    }
+    .acesso { max-width: 500px; margin: 35px auto; }
+    label { display: block; margin: 14px 0 6px; }
+    input { width: 100%; padding: 11px; border: 1px solid #aab6c5; border-radius: 6px; font: inherit; }
+    button { background: #142b4d; color: white; padding: 11px 16px; border: 0; border-radius: 6px; cursor: pointer; font: inherit; margin-top: 15px; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .link-botao { border: 0; background: none; color: #14579a; text-decoration: underline; padding: 0; margin: 16px 0 0; }
+    .status { min-height: 1.5em; overflow-wrap: anywhere; }
+    footer { text-align: center; padding: 25px; color: #607086; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
@@ -60,123 +31,195 @@
     <p>Organização musical da igreja</p>
   </header>
 
-  <main id="painel-gestao" style="display: none;">
+  <main id="painel-gestao" hidden>
     <h2>Painel de Gestão Musical</h2>
-    <div class="painel">
-      <section class="cartao">
-        <h2>Calendário de Cultos</h2>
-        <p>Consulte as datas e os horários dos cultos.</p>
-      </section>
-
-      <section class="cartao">
-        <h2>Escala da Banda</h2>
-        <p>Organize os músicos de cada culto.</p>
-      </section>
-
-      <section class="cartao">
-        <h2>Escala do Vocal</h2>
-        <p>Organize os cantores de cada culto.</p>
-      </section>
-
-      <section class="cartao">
-        <h2>Controle de Presença</h2>
-        <p>Acompanhe a participação dos integrantes.</p>
-      </section>
+    <p id="usuario-atual"></p>
+    <button id="sair" type="button">Sair do sistema</button>
+    <div class="painel" style="margin-top:20px">
+      <section class="cartao"><h2>Calendário de Cultos</h2><p>Consulte as datas e os horários dos cultos.</p></section>
+      <section class="cartao"><h2>Escala da Banda</h2><p>Organize os músicos de cada culto.</p></section>
+      <section class="cartao"><h2>Escala do Vocal</h2><p>Organize os cantores de cada culto.</p></section>
+      <section class="cartao"><h2>Controle de Presença</h2><p>Acompanhe a participação dos integrantes.</p></section>
     </div>
-  </main> <section id="area-login" class="cartao">
-  <h2>Acesso ao Sistema</h2>
-  <p>Entre com seu e-mail e senha.</p>
+  </main>
 
-  <form id="form-login">
-    <label for="email">E-mail</label>
-    <input type="email" id="email" required>
+  <section id="area-login" class="cartao acesso" hidden>
+    <h2>Acesso ao Sistema</h2>
+    <p>Entre com seu e-mail e senha.</p>
+    <form id="form-login">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" autocomplete="username" required>
+      <label for="senha">Senha</label>
+      <input type="password" id="senha" autocomplete="current-password" required>
+      <button type="submit">Entrar</button>
+    </form>
+    <button type="button" class="link-botao" id="mostrar-recuperacao">Esqueci minha senha</button>
+    <p id="mensagem-login" class="status" role="status"></p>
+  </section>
 
-    <label for="senha">Senha</label>
-    <input type="password" id="senha" required>
+  <section id="solicitar-recuperacao" class="cartao acesso" hidden>
+    <h2>Recuperar acesso</h2>
+    <p>Informe seu e-mail. Você receberá um link para cadastrar outra senha.</p>
+    <form id="form-recuperacao">
+      <label for="email-recuperacao">E-mail</label>
+      <input type="email" id="email-recuperacao" autocomplete="email" required>
+      <button type="submit">Enviar link de recuperação</button>
+    </form>
+    <button type="button" class="link-botao" id="voltar-login">Voltar ao login</button>
+    <p id="mensagem-recuperacao" class="status" role="status"></p>
+  </section>
 
-    <button type="submit">Entrar</button>
-  </form>
-
-  <p id="mensagem-login" role="status"></p>
-</section>
-
+  <section id="recuperar-senha" class="cartao acesso" hidden>
+    <h2>Cadastrar nova senha</h2>
+    <p>Digite uma nova senha com pelo menos 8 caracteres.</p>
+    <form id="form-nova-senha">
+      <label for="nova-senha">Nova senha</label>
+      <input type="password" id="nova-senha" minlength="8" autocomplete="new-password" required>
+      <label for="confirmar-senha">Confirmar nova senha</label>
+      <input type="password" id="confirmar-senha" minlength="8" autocomplete="new-password" required>
+      <button type="submit">Salvar nova senha</button>
+    </form>
+    <p id="mensagem-nova-senha" class="status" role="status"></p>
+  </section>
 
   <footer>ADVIC - Ministério Vinde a Ceifa</footer>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-const SUPABASE_URL = "https://jvcrmdzwaiufjumjqtwu.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_PPkCcPkHpVshgAlnZShwvg__a4zSMPm";
+    const SUPABASE_URL = 'https://jvcrmdzwaiufjumjqtwu.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_PPkCcPkHpVshgAlnZShwvg__a4zSMPm';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-document.getElementById("form-login").addEventListener("submit", async function(event) {
-  event.preventDefault();
 
-  const email = document.getElementById("email").value;
-  const senha = document.getElementById("senha").value;
-  const mensagem = document.getElementById("mensagem-login");
+    const el = id => document.getElementById(id);
+    const sections = ['painel-gestao', 'area-login', 'solicitar-recuperacao', 'recuperar-senha'];
+    let recuperando = false;
 
-  mensagem.textContent = "Verificando acesso...";
-
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
-    email: email,
-    password: senha
-  });
-
-  if (error) {
-    mensagem.textContent = "Não foi possível entrar. Verifique seu e-mail e senha.";
-    return;
-  }
-
-  mensagem.textContent = "Login realizado com sucesso!";
-  document.getElementById("painel-gestao").style.display = "block";
-});
-  </script>
-<section id="recuperar-senha" class="cartao" style="display:none; max-width:500px; margin:20px auto;">
-  <h2>Cadastrar nova senha</h2>
-  <p>Digite sua nova senha para acessar o sistema.</p>
-
-  <form id="form-nova-senha">
-    <label for="nova-senha">Nova senha</label>
-    <input type="password" id="nova-senha" minlength="8" required>
-
-    <button type="submit">Salvar nova senha</button>
-  </form>
-
-  <p id="mensagem-nova-senha" role="status"></p>
-</section>
-<script>
-  const areaRecuperacao = document.getElementById("recuperar-senha");
-  const formularioNovaSenha = document.getElementById("form-nova-senha");
-  const mensagemNovaSenha = document.getElementById("mensagem-nova-senha");
-
-  supabaseClient.auth.onAuthStateChange((evento, sessao) => {
-    const painel = document.getElementById("painel-gestao");
-painel.style.display = sessao && evento !== "PASSWORD_RECOVERY" ? "block" : "none";
-    if (evento === "PASSWORD_RECOVERY") {
-      areaRecuperacao.style.display = "block";
-      areaRecuperacao.scrollIntoView();
+    function mostrar(id) {
+      sections.forEach(nome => { el(nome).hidden = nome !== id; });
     }
-  });
 
-  formularioNovaSenha.addEventListener("submit", async function(event) {
-    event.preventDefault();
+    function descreverErro(error) {
+      if (!error) return 'Erro desconhecido.';
+      const codigo = error.code || '';
+      if (codigo === 'invalid_credentials') return 'E-mail ou senha incorretos. Use “Esqueci minha senha” para criar outra senha.';
+      if (codigo === 'over_email_send_rate_limit' || error.status === 429) return 'Limite temporário de e-mails atingido. Aguarde antes de solicitar outro link.';
+      if (codigo === 'otp_expired' || codigo === 'otp_disabled') return 'Este link expirou ou já foi utilizado. Solicite um novo link.';
+      if (codigo === 'same_password') return 'A nova senha precisa ser diferente da anterior.';
+      if (codigo === 'weak_password') return 'Essa senha não atende aos requisitos de segurança. Escolha outra.';
+      return `Erro do Supabase: ${error.message || codigo} (${codigo || error.status || 'sem código'}).`;
+    }
 
-    const novaSenha = document.getElementById("nova-senha").value;
-    mensagemNovaSenha.textContent = "Salvando nova senha...";
+    async function mostrarSessao() {
+      if (recuperando) return;
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error) console.warn('Erro ao verificar sessão:', error.code, error.message);
+      if (data?.session) {
+        el('usuario-atual').textContent = `Conectado como: ${data.session.user.email || 'usuário'}`;
+        mostrar('painel-gestao');
+      } else {
+        mostrar('area-login');
+      }
+    }
 
-    const { error } = await supabaseClient.auth.updateUser({
-      password: novaSenha
+    // O Supabase envia o evento PASSWORD_RECOVERY após validar o link recebido por e-mail.
+    supabaseClient.auth.onAuthStateChange((evento, sessao) => {
+      if (evento === 'PASSWORD_RECOVERY') {
+        recuperando = true;
+        mostrar('recuperar-senha');
+        el('mensagem-nova-senha').textContent = '';
+        return;
+      }
+      if (recuperando) return;
+      if (evento === 'SIGNED_IN' || evento === 'INITIAL_SESSION' || evento === 'SIGNED_OUT') {
+        if (sessao) {
+          el('usuario-atual').textContent = `Conectado como: ${sessao.user.email || 'usuário'}`;
+          mostrar('painel-gestao');
+        } else {
+          mostrar('area-login');
+        }
+      }
     });
 
-    if (error) {
-      mensagemNovaSenha.textContent = "Não foi possível alterar a senha. Solicite um novo link de recuperação.";
-      return;
-    }
+    el('form-login').addEventListener('submit', async event => {
+      event.preventDefault();
+      const botao = event.currentTarget.querySelector('button[type="submit"]');
+      botao.disabled = true;
+      el('mensagem-login').textContent = 'Verificando acesso...';
+      try {
+        const { error } = await supabaseClient.auth.signInWithPassword({
+          email: el('email').value.trim(), password: el('senha').value
+        });
+        if (error) { el('mensagem-login').textContent = descreverErro(error); return; }
+        el('senha').value = '';
+        el('mensagem-login').textContent = '';
+        await mostrarSessao();
+      } catch (error) {
+        el('mensagem-login').textContent = `Não foi possível conectar: ${error.message}`;
+      } finally { botao.disabled = false; }
+    });
 
-    mensagemNovaSenha.textContent = "Senha alterada com sucesso! Agora você pode entrar no sistema.";
-    formularioNovaSenha.reset();
-    areaRecuperacao.style.display = "none";
-    await supabaseClient.auth.signOut();
-    window.history.replaceState({}, document.title, window.location.pathname);
-  });
-</script></body>
+    el('mostrar-recuperacao').addEventListener('click', () => {
+      el('email-recuperacao').value = el('email').value.trim();
+      el('mensagem-recuperacao').textContent = '';
+      mostrar('solicitar-recuperacao');
+    });
+    el('voltar-login').addEventListener('click', () => mostrar('area-login'));
+
+    el('form-recuperacao').addEventListener('submit', async event => {
+      event.preventDefault();
+      const botao = event.currentTarget.querySelector('button[type="submit"]');
+      botao.disabled = true;
+      el('mensagem-recuperacao').textContent = 'Solicitando link...';
+      try {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(
+          el('email-recuperacao').value.trim(),
+          { redirectTo: 'https://copquelvagner.github.io/advic-gestao-musical/' }
+        );
+        el('mensagem-recuperacao').textContent = error
+          ? descreverErro(error)
+          : 'Se o e-mail estiver cadastrado, você receberá um link. Verifique também a caixa de spam. Use apenas o link mais recente.';
+      } catch (error) {
+        el('mensagem-recuperacao').textContent = `Não foi possível solicitar o link: ${error.message}`;
+      } finally { botao.disabled = false; }
+    });
+
+    el('form-nova-senha').addEventListener('submit', async event => {
+      event.preventDefault();
+      const novaSenha = el('nova-senha').value;
+      if (novaSenha !== el('confirmar-senha').value) {
+        el('mensagem-nova-senha').textContent = 'As duas senhas precisam ser iguais.';
+        return;
+      }
+      const botao = event.currentTarget.querySelector('button[type="submit"]');
+      botao.disabled = true;
+      el('mensagem-nova-senha').textContent = 'Salvando nova senha...';
+      try {
+        const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+        if (sessionError || !session) {
+          el('mensagem-nova-senha').textContent = 'O link não criou uma sessão válida. Solicite outro link de recuperação.';
+          return;
+        }
+        const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
+        if (error) { el('mensagem-nova-senha').textContent = descreverErro(error); return; }
+        el('form-nova-senha').reset();
+        await supabaseClient.auth.signOut();
+        recuperando = false;
+        history.replaceState({}, document.title, location.pathname);
+        mostrar('area-login');
+        el('mensagem-login').textContent = 'Senha alterada com sucesso! Entre com sua nova senha.';
+      } catch (error) {
+        el('mensagem-nova-senha').textContent = `Erro ao alterar senha: ${error.message}`;
+      } finally { botao.disabled = false; }
+    });
+
+    el('sair').addEventListener('click', async () => {
+      const { error } = await supabaseClient.auth.signOut();
+      if (error) { alert(descreverErro(error)); return; }
+      mostrar('area-login');
+    });
+
+    // O estado inicial é decidido após a biblioteca recuperar a sessão armazenada.
+    mostrarSessao();
+  </script>
+</body>
 </html>
