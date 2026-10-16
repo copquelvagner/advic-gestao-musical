@@ -16,7 +16,7 @@
     .cartao p { line-height: 1.5; }
     .acesso { max-width: 500px; margin: 35px auto; }
     label { display: block; margin: 14px 0 6px; }
-    input { width: 100%; padding: 11px; border: 1px solid #aab6c5; border-radius: 6px; font: inherit; }
+    input, select { width: 100%; padding: 11px; border: 1px solid #aab6c5; border-radius: 6px; font: inherit; background: white; }
     button { background: #142b4d; color: white; padding: 11px 16px; border: 0; border-radius: 6px; cursor: pointer; font: inherit; margin-top: 15px; }
     button:disabled { opacity: .6; cursor: wait; }
     .link-botao { border: 0; background: none; color: #14579a; text-decoration: underline; padding: 0; margin: 16px 0 0; }
@@ -36,39 +36,33 @@
     <p id="usuario-atual"></p>
     <button id="sair" type="button">Sair do sistema</button>
     <div class="painel" style="margin-top:20px">
-     
-<section class="cartao">
-  <h2>Calendário de Cultos</h2>
-  <p>Consulte as datas e os horários dos cultos.</p>
-  <div id="lista-cultos">Carregando calendário...</div>
-</section>
+      <section class="cartao">
+        <h2>Calendário de Cultos</h2>
+        <p>Consulte as datas e os horários dos cultos.</p>
+        <div id="lista-cultos">Carregando calendário...</div>
+      </section>
 
       <section class="cartao">
-  <h2>Escala da Banda</h2>
-  <p>Organize os músicos de cada culto.</p>
-  <div id="lista-escala-banda">Carregando escala...</div>
-        <button type="button" id="btn-cadastrar-banda">
-          <div id="formulario-escala-banda" hidden>
-  <h3>Nova escala da Banda</h3>
-  <label for="culto-banda">Culto</label>
-  <select id="culto-banda"></select>
+        <h2>Escala da Banda</h2>
+        <p>Organize os músicos de cada culto.</p>
+        <div id="lista-escala-banda">Carregando escala...</div>
+        <button type="button" id="btn-cadastrar-banda">Cadastrar na Escala</button>
+        <div id="formulario-escala-banda" hidden>
+          <h3>Nova escala da Banda</h3>
+          <label for="culto-banda">Culto</label>
+          <select id="culto-banda"><option value="">Selecione um culto</option></select>
+          <label for="musico-banda">Músico</label>
+          <select id="musico-banda"><option value="">Selecione um músico</option></select>
+          <button type="button" id="btn-salvar-banda">Salvar escala</button>
+          <p id="mensagem-escala-banda" class="status" role="status"></p>
+        </div>
+      </section>
 
-  <label for="musico-banda">Músico</label>
-  <select id="musico-banda"></select>
-
-  <button type="button" id="btn-salvar-banda">
-    Salvar escala
-  </button>
-  <p id="mensagem-escala-banda"></p>
-</div>
-  Cadastrar na Escala
-</button>
-</section>
-     <section class="cartao">
-  <h2>Escala do Vocal</h2>
-  <p>Organize os cantores de cada culto.</p>
-  <div id="lista-escala-vocal">Carregando escala vocal...</div>
-</section>
+      <section class="cartao">
+        <h2>Escala do Vocal</h2>
+        <p>Organize os cantores de cada culto.</p>
+        <div id="lista-escala-vocal">Carregando escala vocal...</div>
+      </section>
       <section class="cartao"><h2>Controle de Presença</h2><p>Acompanhe a participação dos integrantes.</p></section>
     </div>
   </main>
@@ -154,7 +148,6 @@
       }
     }
 
-    // O Supabase envia o evento PASSWORD_RECOVERY após validar o link recebido por e-mail.
     supabaseClient.auth.onAuthStateChange((evento, sessao) => {
       if (evento === 'PASSWORD_RECOVERY') {
         recuperando = true;
@@ -254,120 +247,177 @@
       mostrar('area-login');
     });
 
-    // O estado inicial é decidido após a biblioteca recuperar a sessão armazenada.
+    async function carregarCultos() {
+      const lista = el('lista-cultos');
+      if (!lista) return;
+      lista.textContent = 'Carregando calendário...';
+      const { data, error } = await supabaseClient
+        .from('cultos')
+        .select('data_culto, periodo, horario, descricao')
+        .order('data_culto', { ascending: true })
+        .order('horario', { ascending: true });
+      if (error) {
+        lista.textContent = 'Não foi possível carregar os cultos.';
+        console.error('Erro no calendário:', error);
+        return;
+      }
+      lista.replaceChildren();
+      if (!data || data.length === 0) {
+        lista.textContent = 'Nenhum culto encontrado.';
+        return;
+      }
+      data.forEach(culto => {
+        const item = document.createElement('p');
+        const [ano, mes, dia] = culto.data_culto.split('-');
+        const dataFormatada = `${dia}/${mes}/${ano}`;
+        const horario = culto.horario ? culto.horario.slice(0, 5) : culto.periodo;
+        item.textContent = `${dataFormatada} - ${horario} - ${culto.descricao}`;
+        lista.appendChild(item);
+      });
+    }
+
+    async function carregarEscalaBanda() {
+      const lista = el('lista-escala-banda');
+      if (!lista) return;
+      lista.textContent = 'Carregando escala...';
+      const { data, error } = await supabaseClient
+        .from('escalas')
+        .select('*')
+        .neq('instrumento', 'Voz')
+        .limit(20);
+      if (error) {
+        console.error('Erro ao carregar escala:', error);
+        lista.textContent = 'Não foi possível carregar a escala.';
+        return;
+      }
+      lista.replaceChildren();
+      if (!data || data.length === 0) {
+        lista.textContent = 'Nenhuma escala encontrada.';
+        return;
+      }
+      data.forEach(escala => {
+        const item = document.createElement('p');
+        item.textContent = `Instrumento: ${escala.instrumento || 'Não informado'}`;
+        lista.appendChild(item);
+      });
+    }
+
+    async function carregarEscalaVocal() {
+      const lista = el('lista-escala-vocal');
+      if (!lista) return;
+      lista.textContent = 'Carregando escala vocal...';
+      const { data, error } = await supabaseClient
+        .from('escalas')
+        .select('*')
+        .eq('instrumento', 'Voz')
+        .limit(20);
+      if (error) {
+        console.error('Erro ao carregar escala vocal:', error);
+        lista.textContent = 'Erro na escala vocal: ' + error.message;
+        return;
+      }
+      lista.replaceChildren();
+      if (!data || data.length === 0) {
+        lista.textContent = 'Nenhuma escala vocal encontrada.';
+        return;
+      }
+      data.forEach(escala => {
+        const item = document.createElement('p');
+        item.textContent = `Vocal: ${escala.instrumento}`;
+        lista.appendChild(item);
+      });
+    }
+
+    // Preenche os campos com os cultos e músicos cadastrados no Supabase.
+    let musicosBanda = [];
+    let carregandoOpcoesBanda = false;
+
+    async function carregarOpcoesBanda() {
+      if (carregandoOpcoesBanda) return;
+      carregandoOpcoesBanda = true;
+      const mensagem = el('mensagem-escala-banda');
+      const seletorCulto = el('culto-banda');
+      const seletorMusico = el('musico-banda');
+      mensagem.textContent = 'Carregando cultos e músicos...';
+      seletorCulto.replaceChildren(new Option('Selecione um culto', ''));
+      seletorMusico.replaceChildren(new Option('Selecione um músico', ''));
+      try {
+        const [resCultos, resMusicos] = await Promise.all([
+          supabaseClient.from('cultos').select('id, data_culto, horario, descricao').order('data_culto', { ascending: true }),
+          supabaseClient.from('musicos').select('*').order('nome', { ascending: true })
+        ]);
+        if (resCultos.error) throw resCultos.error;
+        if (resMusicos.error) throw resMusicos.error;
+
+        (resCultos.data || []).forEach(culto => {
+          const partes = (culto.data_culto || '').split('-');
+          const data = partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : (culto.data_culto || 'Sem data');
+          const horario = culto.horario ? String(culto.horario).slice(0, 5) : '';
+          seletorCulto.add(new Option(`${data} ${horario} - ${culto.descricao || 'Culto'}`, culto.id));
+        });
+
+        musicosBanda = (resMusicos.data || []).filter(m =>
+          m.ativo !== false &&
+          !/^(vocal|voz)$/i.test(String(m.departamento || '').trim()) &&
+          !/^(voz|vocal)$/i.test(String(m.instrumento || '').trim())
+        );
+        musicosBanda.forEach(m => seletorMusico.add(new Option(
+          `${m.nome} - ${m.instrumento || 'Instrumento não informado'}`, m.id
+        )));
+        mensagem.textContent = !resCultos.data?.length ? 'Não há cultos cadastrados.' :
+          !musicosBanda.length ? 'Não há músicos disponíveis para a Banda.' : '';
+      } catch (erro) {
+        mensagem.textContent = `Não foi possível carregar as opções: ${erro.message || erro}`;
+        console.error('Erro ao preparar cadastro da Banda:', erro);
+      } finally {
+        carregandoOpcoesBanda = false;
+      }
+    }
+
+    el('btn-cadastrar-banda').addEventListener('click', () => {
+      const formulario = el('formulario-escala-banda');
+      formulario.hidden = !formulario.hidden;
+      if (!formulario.hidden) carregarOpcoesBanda();
+    });
+
+    el('btn-salvar-banda').addEventListener('click', async () => {
+      const botao = el('btn-salvar-banda');
+      const mensagem = el('mensagem-escala-banda');
+      const cultoId = el('culto-banda').value;
+      const musicoId = el('musico-banda').value;
+      if (!cultoId || !musicoId) {
+        mensagem.textContent = 'Selecione o culto e o músico antes de salvar.';
+        return;
+      }
+      const musico = musicosBanda.find(m => String(m.id) === musicoId);
+      if (!musico || !musico.instrumento) {
+        mensagem.textContent = 'O músico selecionado precisa ter um instrumento cadastrado.';
+        return;
+      }
+      botao.disabled = true;
+      mensagem.textContent = 'Salvando escala...';
+      try {
+        const registro = {
+          culto_id: cultoId,
+          musico_id: musicoId,
+          instrumento: musico.instrumento
+        };
+        // Aproveita o identificador do departamento se existir no cadastro do músico.
+        if (musico.departamento_id != null) registro.departamento_id = musico.departamento_id;
+        const { error } = await supabaseClient.from('escalas').insert(registro);
+        if (error) throw error;
+        mensagem.textContent = 'Músico cadastrado na escala com sucesso!';
+        el('musico-banda').value = '';
+        await carregarEscalaBanda();
+      } catch (erro) {
+        mensagem.textContent = `Não foi possível salvar a escala: ${erro.message || erro}`;
+        console.error('Erro ao salvar escala da Banda:', erro);
+      } finally {
+        botao.disabled = false;
+      }
+    });
+
     mostrarSessao();
- 
-async function carregarCultos() {
-  const lista = document.getElementById('lista-cultos');
-  if (!lista) return;
-
-  lista.textContent = 'Carregando calendário...';
-
-  const { data, error } = await supabaseClient
-    .from('cultos')
-    .select('data_culto, periodo, horario, descricao')
-    .order('data_culto', { ascending: true })
-    .order('horario', { ascending: true });
-
-  if (error) {
-    lista.textContent = 'Não foi possível carregar os cultos.';
-    console.error('Erro no calendário:', error);
-    return;
-  }
-
-  lista.replaceChildren();
-
-  if (!data || data.length === 0) {
-    lista.textContent = 'Nenhum culto encontrado.';
-    return;
-  }
-
-  data.forEach(culto => {
-    const item = document.createElement('p');
-    const [ano, mes, dia] = culto.data_culto.split('-');
-    const dataFormatada = `${dia}/${mes}/${ano}`;
-    const horario = culto.horario ? culto.horario.slice(0, 5) : culto.periodo;
-
-    item.textContent = `${dataFormatada} - ${horario} - ${culto.descricao}`;
-    lista.appendChild(item);
-  });
-}
-async function carregarEscalaBanda() {
-  const lista = document.getElementById('lista-escala-banda');
-  if (!lista) return;
-
-  lista.textContent = 'Carregando escala...';
-
-  const { data, error } = await supabaseClient
-    .from('escalas')
-    .select('*')
-    .neq('instrumento', 'Voz')
-.limit(20);
-
-  if (error) {
-    console.error('Erro ao carregar escala:', error);
-    lista.textContent = 'Não foi possível carregar a escala.';
-    return;
-  }
-
-  lista.replaceChildren();
-
-if (!data || data.length === 0) {
-  lista.textContent = 'Nenhuma escala encontrada.';
-  return;
-}
-
-data.forEach(escala => {
-  const item = document.createElement('p');
- item.textContent = `Instrumento: ${escala.instrumento || 'Não informado'}`;
-  lista.appendChild(item);
-});
-  
-}
-
-
-
-
-async function carregarEscalaVocal() {
-  const lista = document.getElementById('lista-escala-vocal');
-  if (!lista) return;
-
-  lista.textContent = 'Carregando escala vocal...';
-
-  const { data, error } = await supabaseClient
-    .from('escalas')
-    .select('*')
-    .eq('instrumento', 'Voz')
-    .limit(20);
-
-  if (error) {
-    console.error('Erro ao carregar escala vocal:', error);
-    lista.textContent = 'Erro na escala vocal: ' + error.message;
-    return;
-  }
-
-  lista.replaceChildren();
-
-  if (!data || data.length === 0) {
-    lista.textContent = 'Nenhuma escala vocal encontrada.';
-    return;
-  }
-
-  data.forEach(escala => {
-    const item = document.createElement('p');
-    item.textContent = `Vocal: ${escala.instrumento}`;
-    lista.appendChild(item);
-  });
-}
-      
-
-
-document.getElementById('btn-cadastrar-banda').addEventListener('click', () => {
-  const formulario = document.getElementById('formulario-escala-banda');
-  formulario.hidden = !formulario.hidden;
-});
-
-</script>
+  </script>
 </body>
 </html>
- 
