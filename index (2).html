@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADVIC Gestão Musical</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f2f5f9; color: #17243b; }
+    header { background: #142b4d; color: white; padding: 30px 20px; text-align: center; }
+    header h1 { margin: 0 0 10px; }
+    main { max-width: 950px; margin: 35px auto; padding: 0 20px; }
+    .painel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+    .cartao { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 3px 12px #00000012; }
+    .cartao h2 { margin-top: 0; }
+    .cartao p { line-height: 1.5; }
+    .acesso { max-width: 500px; margin: 35px auto; }
+    label { display: block; margin: 14px 0 6px; }
+    input, select { width: 100%; padding: 11px; border: 1px solid #aab6c5; border-radius: 6px; font: inherit; background: white; }
+    button { background: #142b4d; color: white; padding: 11px 16px; border: 0; border-radius: 6px; cursor: pointer; font: inherit; margin-top: 15px; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .link-botao { border: 0; background: none; color: #14579a; text-decoration: underline; padding: 0; margin: 16px 0 0; }
+    .status { min-height: 1.5em; overflow-wrap: anywhere; }
+    footer { text-align: center; padding: 25px; color: #607086; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ADVIC Gestão Musical</h1>
+    <p>Organização musical da igreja</p>
+  </header>
+
+  <main id="painel-gestao" hidden>
+    <h2>Painel de Gestão Musical</h2>
+    <p id="usuario-atual"></p>
+    <button id="sair" type="button">Sair do sistema</button>
+    <div class="painel" style="margin-top:20px">
+      <section class="cartao">
+        <h2>Calendário de Cultos</h2>
+        <p>Consulte as datas e os horários dos cultos.</p>
+        <div id="lista-cultos">Carregando calendário...</div>
+      </section>
+
+      <section class="cartao">
+        <h2>Escala da Banda</h2>
+        <p>Organize os músicos de cada culto.</p>
+        <div id="lista-escala-banda">Carregando escala...</div>
+        <button type="button" id="btn-cadastrar-banda">Cadastrar na Escala</button>
+        <div id="formulario-escala-banda" hidden>
+          <h3>Nova escala da Banda</h3>
+          <label for="culto-banda">Culto</label>
+          <select id="culto-banda"><option value="">Selecione um culto</option></select>
+          <label for="musico-banda">Músico</label>
+          <select id="musico-banda"><option value="">Selecione um músico</option></select>
+          <button type="button" id="btn-salvar-banda">Salvar escala</button>
+          <p id="mensagem-escala-banda" class="status" role="status"></p>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <h2>Escala do Vocal</h2>
+        <p>Organize os cantores de cada culto.</p>
+        <div id="lista-escala-vocal">Carregando escala vocal...</div>
+      </section>
+      <section class="cartao"><h2>Controle de Presença</h2><p>Acompanhe a participação dos integrantes.</p></section>
+    </div>
+  </main>
+
+  <section id="area-login" class="cartao acesso" hidden>
+    <h2>Acesso ao Sistema</h2>
+    <p>Entre com seu e-mail e senha.</p>
+    <form id="form-login">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" autocomplete="username" required>
+      <label for="senha">Senha</label>
+      <input type="password" id="senha" autocomplete="current-password" required>
+      <button type="submit">Entrar</button>
+    </form>
+    <button type="button" class="link-botao" id="mostrar-recuperacao">Esqueci minha senha</button>
+    <p id="mensagem-login" class="status" role="status"></p>
+  </section>
+
+  <section id="solicitar-recuperacao" class="cartao acesso" hidden>
+    <h2>Recuperar acesso</h2>
+    <p>Informe seu e-mail. Você receberá um link para cadastrar outra senha.</p>
+    <form id="form-recuperacao">
+      <label for="email-recuperacao">E-mail</label>
+      <input type="email" id="email-recuperacao" autocomplete="email" required>
+      <button type="submit">Enviar link de recuperação</button>
+    </form>
+    <button type="button" class="link-botao" id="voltar-login">Voltar ao login</button>
+    <p id="mensagem-recuperacao" class="status" role="status"></p>
+  </section>
+
+  <section id="recuperar-senha" class="cartao acesso" hidden>
+    <h2>Cadastrar nova senha</h2>
+    <p>Digite uma nova senha com pelo menos 8 caracteres.</p>
+    <form id="form-nova-senha">
+      <label for="nova-senha">Nova senha</label>
+      <input type="password" id="nova-senha" minlength="8" autocomplete="new-password" required>
+      <label for="confirmar-senha">Confirmar nova senha</label>
+      <input type="password" id="confirmar-senha" minlength="8" autocomplete="new-password" required>
+      <button type="submit">Salvar nova senha</button>
+    </form>
+    <p id="mensagem-nova-senha" class="status" role="status"></p>
+  </section>
+
+  <footer>ADVIC - Ministério Vinde a Ceifa</footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://jvcrmdzwaiufjumjqtwu.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_PPkCcPkHpVshgAlnZShwvg__a4zSMPm';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const el = id => document.getElementById(id);
+    const sections = ['painel-gestao', 'area-login', 'solicitar-recuperacao', 'recuperar-senha'];
+    let recuperando = false;
+
+    function mostrar(id) {
+      sections.forEach(nome => { el(nome).hidden = nome !== id; });
+    }
+
+    function descreverErro(error) {
+      if (!error) return 'Erro desconhecido.';
+      const codigo = error.code || '';
+      if (codigo === 'invalid_credentials') return 'E-mail ou senha incorretos. Use “Esqueci minha senha” para criar outra senha.';
+      if (codigo === 'over_email_send_rate_limit' || error.status === 429) return 'Limite temporário de e-mails atingido. Aguarde antes de solicitar outro link.';
+      if (codigo === 'otp_expired' || codigo === 'otp_disabled') return 'Este link expirou ou já foi utilizado. Solicite um novo link.';
+      if (codigo === 'same_password') return 'A nova senha precisa ser diferente da anterior.';
+      if (codigo === 'weak_password') return 'Essa senha não atende aos requisitos de segurança. Escolha outra.';
+      return `Erro do Supabase: ${error.message || codigo} (${codigo || error.status || 'sem código'}).`;
+    }
+
+    async function mostrarSessao() {
+      if (recuperando) return;
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error) console.warn('Erro ao verificar sessão:', error.code, error.message);
+      if (data?.session) {
+        el('usuario-atual').textContent = `Conectado como: ${data.session.user.email || 'usuário'}`;
+        mostrar('painel-gestao');
+        await carregarCultos();
+        await carregarEscalaBanda();
+        await carregarEscalaVocal();
+      } else {
+        mostrar('area-login');
+      }
+    }
+
+    supabaseClient.auth.onAuthStateChange((evento, sessao) => {
+      if (evento === 'PASSWORD_RECOVERY') {
+        recuperando = true;
+        mostrar('recuperar-senha');
+        el('mensagem-nova-senha').textContent = '';
+        return;
+      }
+      if (recuperando) return;
+      if (evento === 'SIGNED_IN' || evento === 'INITIAL_SESSION' || evento === 'SIGNED_OUT') {
+        if (sessao) {
+          el('usuario-atual').textContent = `Conectado como: ${sessao.user.email || 'usuário'}`;
+          mostrar('painel-gestao');
+          carregarCultos();
+          carregarEscalaBanda();
+          carregarEscalaVocal();
+        } else {
+          mostrar('area-login');
+        }
+      }
+    });
+
+    el('form-login').addEventListener('submit', async event => {
+      event.preventDefault();
+      const botao = event.currentTarget.querySelector('button[type="submit"]');
+      botao.disabled = true;
+      el('mensagem-login').textContent = 'Verificando acesso...';
+      try {
+        const { error } = await supabaseClient.auth.signInWithPassword({
+          email: el('email').value.trim(), password: el('senha').value
+        });
+        if (error) { el('mensagem-login').textContent = descreverErro(error); return; }
+        el('senha').value = '';
+        el('mensagem-login').textContent = '';
+        await mostrarSessao();
+      } catch (error) {
+        el('mensagem-login').textContent = `Não foi possível conectar: ${error.message}`;
+      } finally { botao.disabled = false; }
+    });
+
+    el('mostrar-recuperacao').addEventListener('click', () => {
+      el('email-recuperacao').value = el('email').value.trim();
+      el('mensagem-recuperacao').textContent = '';
+      mostrar('solicitar-recuperacao');
+    });
+    el('voltar-login').addEventListener('click', () => mostrar('area-login'));
+
+    el('form-recuperacao').addEventListener('submit', async event => {
+      event.preventDefault();
+      const botao = event.currentTarget.querySelector('button[type="submit"]');
+      botao.disabled = true;
+      el('mensagem-recuperacao').textContent = 'Solicitando link...';
+      try {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(
+          el('email-recuperacao').value.trim(),
+          { redirectTo: 'https://copquelvagner.github.io/advic-gestao-musical/' }
+        );
+        el('mensagem-recuperacao').textContent = error
+          ? descreverErro(error)
+          : 'Se o e-mail estiver cadastrado, você receberá um link. Verifique também a caixa de spam. Use apenas o link mais recente.';
+      } catch (error) {
+        el('mensagem-recuperacao').textContent = `Não foi possível solicitar o link: ${error.message}`;
+      } finally { botao.disabled = false; }
+    });
+
+    el('form-nova-senha').addEventListener('submit', async event => {
+      event.preventDefault();
+      const novaSenha = el('nova-senha').value;
+      if (novaSenha !== el('confirmar-senha').value) {
+        el('mensagem-nova-senha').textContent = 'As duas senhas precisam ser iguais.';
+        return;
+      }
+      const botao = event.currentTarget.querySelector('button[type="submit"]');
+      botao.disabled = true;
+      el('mensagem-nova-senha').textContent = 'Salvando nova senha...';
+      try {
+        const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+        if (sessionError || !session) {
+          el('mensagem-nova-senha').textContent = 'O link não criou uma sessão válida. Solicite outro link de recuperação.';
+          return;
+        }
+        const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
+        if (error) { el('mensagem-nova-senha').textContent = descreverErro(error); return; }
+        el('form-nova-senha').reset();
+        await supabaseClient.auth.signOut();
+        recuperando = false;
+        history.replaceState({}, document.title, location.pathname);
+        mostrar('area-login');
+        el('mensagem-login').textContent = 'Senha alterada com sucesso! Entre com sua nova senha.';
+      } catch (error) {
+        el('mensagem-nova-senha').textContent = `Erro ao alterar senha: ${error.message}`;
+      } finally { botao.disabled = false; }
+    });
+
+    el('sair').addEventListener('click', async () => {
+      const { error } = await supabaseClient.auth.signOut();
+      if (error) { alert(descreverErro(error)); return; }
+      mostrar('area-login');
+    });
+
+    async function carregarCultos() {
+      const lista = el('lista-cultos');
+      if (!lista) return;
+      lista.textContent = 'Carregando calendário...';
+      const { data, error } = await supabaseClient
+        .from('cultos')
+        .select('data_culto, periodo, horario, descricao')
+        .order('data_culto', { ascending: true })
+        .order('horario', { ascending: true });
+      if (error) {
+        lista.textContent = 'Não foi possível carregar os cultos.';
+        console.error('Erro no calendário:', error);
+        return;
+      }
+      lista.replaceChildren();
+      if (!data || data.length === 0) {
+        lista.textContent = 'Nenhum culto encontrado.';
+        return;
+      }
+      data.forEach(culto => {
+        const item = document.createElement('p');
+        const [ano, mes, dia] = culto.data_culto.split('-');
+        const dataFormatada = `${dia}/${mes}/${ano}`;
+        const horario = culto.horario ? culto.horario.slice(0, 5) : culto.periodo;
+        item.textContent = `${dataFormatada} - ${horario} - ${culto.descricao}`;
+        lista.appendChild(item);
+      });
+    }
+
+    async function carregarEscalaBanda() {
+      const lista = el('lista-escala-banda');
+      if (!lista) return;
+      lista.textContent = 'Carregando escala...';
+      const { data, error } = await supabaseClient
+        .from('escalas')
+        .select('*')
+        .neq('instrumento', 'Voz')
+        .limit(20);
+      if (error) {
+        console.error('Erro ao carregar escala:', error);
+        lista.textContent = 'Não foi possível carregar a escala.';
+        return;
+      }
+      lista.replaceChildren();
+      if (!data || data.length === 0) {
+        lista.textContent = 'Nenhuma escala encontrada.';
+        return;
+      }
+      data.forEach(escala => {
+        const item = document.createElement('p');
+        item.textContent = `Instrumento: ${escala.instrumento || 'Não informado'}`;
+        lista.appendChild(item);
+      });
+    }
+
+    async function carregarEscalaVocal() {
+      const lista = el('lista-escala-vocal');
+      if (!lista) return;
+      lista.textContent = 'Carregando escala vocal...';
+      const { data, error } = await supabaseClient
+        .from('escalas')
+        .select('*')
+        .eq('instrumento', 'Voz')
+        .limit(20);
+      if (error) {
+        console.error('Erro ao carregar escala vocal:', error);
+        lista.textContent = 'Erro na escala vocal: ' + error.message;
+        return;
+      }
+      lista.replaceChildren();
+      if (!data || data.length === 0) {
+        lista.textContent = 'Nenhuma escala vocal encontrada.';
+        return;
+      }
+      data.forEach(escala => {
+        const item = document.createElement('p');
+        item.textContent = `Vocal: ${escala.instrumento}`;
+        lista.appendChild(item);
+      });
+    }
+
+    // Preenche os campos com os cultos e músicos cadastrados no Supabase.
+    let musicosBanda = [];
+    let carregandoOpcoesBanda = false;
+
+    async function carregarOpcoesBanda() {
+      if (carregandoOpcoesBanda) return;
+      carregandoOpcoesBanda = true;
+      const mensagem = el('mensagem-escala-banda');
+      const seletorCulto = el('culto-banda');
+      const seletorMusico = el('musico-banda');
+      mensagem.textContent = 'Carregando cultos e músicos...';
+      seletorCulto.replaceChildren(new Option('Selecione um culto', ''));
+      seletorMusico.replaceChildren(new Option('Selecione um músico', ''));
+      try {
+        const [resCultos, resMusicos] = await Promise.all([
+          supabaseClient.from('cultos').select('id, data_culto, horario, descricao').order('data_culto', { ascending: true }),
+          supabaseClient.from('musicos').select('*').order('nome', { ascending: true })
+        ]);
+        if (resCultos.error) throw resCultos.error;
+        if (resMusicos.error) throw resMusicos.error;
+
+        (resCultos.data || []).forEach(culto => {
+          const partes = (culto.data_culto || '').split('-');
+          const data = partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : (culto.data_culto || 'Sem data');
+          const horario = culto.horario ? String(culto.horario).slice(0, 5) : '';
+          seletorCulto.add(new Option(`${data} ${horario} - ${culto.descricao || 'Culto'}`, culto.id));
+        });
+
+        musicosBanda = (resMusicos.data || []).filter(m =>
+          m.ativo !== false &&
+          !/^(vocal|voz)$/i.test(String(m.departamento || '').trim()) &&
+          !/^(voz|vocal)$/i.test(String(m.instrumento || '').trim())
+        );
+        musicosBanda.forEach(m => seletorMusico.add(new Option(
+          `${m.nome} - ${m.instrumento || 'Instrumento não informado'}`, m.id
+        )));
+        mensagem.textContent = !resCultos.data?.length ? 'Não há cultos cadastrados.' :
+          !musicosBanda.length ? 'Não há músicos disponíveis para a Banda.' : '';
+      } catch (erro) {
+        mensagem.textContent = `Não foi possível carregar as opções: ${erro.message || erro}`;
+        console.error('Erro ao preparar cadastro da Banda:', erro);
+      } finally {
+        carregandoOpcoesBanda = false;
+      }
+    }
+
+    el('btn-cadastrar-banda').addEventListener('click', () => {
+      const formulario = el('formulario-escala-banda');
+      formulario.hidden = !formulario.hidden;
+      if (!formulario.hidden) carregarOpcoesBanda();
+    });
+
+    el('btn-salvar-banda').addEventListener('click', async () => {
+      const botao = el('btn-salvar-banda');
+      const mensagem = el('mensagem-escala-banda');
+      const cultoId = el('culto-banda').value;
+      const musicoId = el('musico-banda').value;
+      if (!cultoId || !musicoId) {
+        mensagem.textContent = 'Selecione o culto e o músico antes de salvar.';
+        return;
+      }
+      const musico = musicosBanda.find(m => String(m.id) === musicoId);
+      if (!musico || !musico.instrumento) {
+        mensagem.textContent = 'O músico selecionado precisa ter um instrumento cadastrado.';
+        return;
+      }
+      botao.disabled = true;
+      mensagem.textContent = 'Salvando escala...';
+      try {
+        const registro = {
+          culto_id: cultoId,
+          musico_id: musicoId,
+          instrumento: musico.instrumento
+        };
+        // Aproveita o identificador do departamento se existir no cadastro do músico.
+        if (musico.departamento_id != null) registro.departamento_id = musico.departamento_id;
+        const { error } = await supabaseClient.from('escalas').insert(registro);
+        if (error) throw error;
+        mensagem.textContent = 'Músico cadastrado na escala com sucesso!';
+        el('musico-banda').value = '';
+        await carregarEscalaBanda();
+      } catch (erro) {
+        mensagem.textContent = `Não foi possível salvar a escala: ${erro.message || erro}`;
+        console.error('Erro ao salvar escala da Banda:', erro);
+      } finally {
+        botao.disabled = false;
+      }
+    });
+
+    mostrarSessao();
+  </script>
+</body>
+</html>
