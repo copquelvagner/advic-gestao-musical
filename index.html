@@ -297,7 +297,7 @@
       }
       data.forEach(escala => {
         const item = document.createElement('p');
-      item.textContent = `${escala.musicos?.nome || 'Músico não identificado'} - ${escala.instrumento || 'Instrumento não informado'} | ${escala.cultos?.data_culto || 'Sem data'} - ${escala.cultos?.horario || ''} - ${escala.cultos?.descricao || 'Culto'}`;
+     item.textContent = `${escala.musicos?.nome || 'Músico não identificado'} - ${escala.instrumento || 'Instrumento não informado'} | ${escala.cultos?.data_culto?.split('-').reverse().join('/') || 'Sem data'} - ${escala.cultos?.horario?.slice(0, 5) || ''} - ${escala.cultos?.descricao || 'Culto'}`;
         lista.appendChild(item);
       });
     }
