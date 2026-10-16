@@ -287,7 +287,18 @@ async function carregarEscalaBanda() {
     return;
   }
 
-  lista.textContent = `${data.length} registro(s) de escala encontrado(s).`;
+  lista.replaceChildren();
+
+if (!data || data.length === 0) {
+  lista.textContent = 'Nenhuma escala encontrada.';
+  return;
+}
+
+data.forEach(escala => {
+  const item = document.createElement('p');
+  item.textContent = `Escala cadastrada: ${escala.id}`;
+  lista.appendChild(item);
+});
 }
   </script>
 </body>
