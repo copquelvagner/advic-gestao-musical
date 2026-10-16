@@ -122,6 +122,7 @@
       if (data?.session) {
         el('usuario-atual').textContent = `Conectado como: ${data.session.user.email || 'usuário'}`;
         mostrar('painel-gestao');
+        await carregarCultos();
       } else {
         mostrar('area-login');
       }
@@ -140,6 +141,7 @@
         if (sessao) {
           el('usuario-atual').textContent = `Conectado como: ${sessao.user.email || 'usuário'}`;
           mostrar('painel-gestao');
+          carregarCultos();
         } else {
           mostrar('area-login');
         }
@@ -226,6 +228,42 @@
 
     // O estado inicial é decidido após a biblioteca recuperar a sessão armazenada.
     mostrarSessao();
-  </script>
+ 
+async function carregarCultos() {
+  const lista = document.getElementById('lista-cultos');
+  if (!lista) return;
+
+  lista.textContent = 'Carregando calendário...';
+
+  const { data, error } = await supabaseClient
+    .from('cultos')
+    .select('data_culto, periodo, horario, descricao')
+    .order('data_culto', { ascending: true })
+    .order('horario', { ascending: true });
+
+  if (error) {
+    lista.textContent = 'Não foi possível carregar os cultos.';
+    console.error('Erro no calendário:', error);
+    return;
+  }
+
+  lista.replaceChildren();
+
+  if (!data || data.length === 0) {
+    lista.textContent = 'Nenhum culto encontrado.';
+    return;
+  }
+
+  data.forEach(culto => {
+    const item = document.createElement('p');
+    const [ano, mes, dia] = culto.data_culto.split('-');
+    const dataFormatada = `${dia}/${mes}/${ano}`;
+    const horario = culto.horario ? culto.horario.slice(0, 5) : culto.periodo;
+
+    item.textContent = `${dataFormatada} - ${horario} - ${culto.descricao}`;
+    lista.appendChild(item);
+  });
+}
+ </script>
 </body>
 </html>
