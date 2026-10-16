@@ -321,7 +321,7 @@ async function carregarEscalaVocal() {
 
   if (error) {
     console.error('Erro ao carregar escala vocal:', error);
-    lista.textContent = 'Não foi possível carregar a escala vocal.';
+    lista.textContent = 'Erro na escala vocal: ' + error.message;
     return;
   }
 
