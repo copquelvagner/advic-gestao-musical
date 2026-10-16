@@ -306,6 +306,10 @@ data.forEach(escala => {
  item.textContent = `Instrumento: ${escala.instrumento || 'Não informado'}`;
   lista.appendChild(item);
 });
+ 
+
+}
+
 
 async function carregarEscalaVocal() {
   const lista = document.getElementById('lista-escala-vocal');
@@ -337,7 +341,7 @@ async function carregarEscalaVocal() {
     item.textContent = `Vocal: ${escala.instrumento}`;
     lista.appendChild(item);
   });
-}}
+}
   </script>
 </body>
 </html>
