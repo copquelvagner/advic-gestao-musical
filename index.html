@@ -300,7 +300,38 @@ data.forEach(escala => {
  item.textContent = `Instrumento: ${escala.instrumento || 'Não informado'}`;
   lista.appendChild(item);
 });
-}
+
+async function carregarEscalaVocal() {
+  const lista = document.getElementById('lista-escala-vocal');
+  if (!lista) return;
+
+  lista.textContent = 'Carregando escala vocal...';
+
+  const { data, error } = await supabaseClient
+    .from('escalas')
+    .select('*')
+    .eq('instrumento', 'Voz')
+    .limit(20);
+
+  if (error) {
+    console.error('Erro ao carregar escala vocal:', error);
+    lista.textContent = 'Não foi possível carregar a escala vocal.';
+    return;
+  }
+
+  lista.replaceChildren();
+
+  if (!data || data.length === 0) {
+    lista.textContent = 'Nenhuma escala vocal encontrada.';
+    return;
+  }
+
+  data.forEach(escala => {
+    const item = document.createElement('p');
+    item.textContent = `Vocal: ${escala.instrumento}`;
+    lista.appendChild(item);
+  });
+}}
   </script>
 </body>
 </html>
