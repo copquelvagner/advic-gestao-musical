@@ -60,7 +60,7 @@
     <p>Organização musical da igreja</p>
   </header>
 
-  <main>
+  <main id="painel-gestao" style="display: none;">
     <h2>Painel de Gestão Musical</h2>
     <div class="painel">
       <section class="cartao">
@@ -127,6 +127,7 @@ document.getElementById("form-login").addEventListener("submit", async function(
   }
 
   mensagem.textContent = "Login realizado com sucesso!";
+  document.getElementById("painel-gestao").style.display = "block";
 });
   </script>
 <section id="recuperar-senha" class="cartao" style="display:none; max-width:500px; margin:20px auto;">
@@ -147,7 +148,9 @@ document.getElementById("form-login").addEventListener("submit", async function(
   const formularioNovaSenha = document.getElementById("form-nova-senha");
   const mensagemNovaSenha = document.getElementById("mensagem-nova-senha");
 
-  supabaseClient.auth.onAuthStateChange((evento) => {
+  supabaseClient.auth.onAuthStateChange((evento, sessao) => {
+    const painel = document.getElementById("painel-gestao");
+painel.style.display = sessao && evento !== "PASSWORD_RECOVERY" ? "block" : "none";
     if (evento === "PASSWORD_RECOVERY") {
       areaRecuperacao.style.display = "block";
       areaRecuperacao.scrollIntoView();
