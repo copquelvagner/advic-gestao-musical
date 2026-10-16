@@ -296,7 +296,7 @@ if (!data || data.length === 0) {
 
 data.forEach(escala => {
   const item = document.createElement('p');
-  item.textContent = `Escala cadastrada: ${escala.id}`;
+  item.textContent = `Escala: ${JSON.stringify(escala)}`;
   lista.appendChild(item);
 });
 }
