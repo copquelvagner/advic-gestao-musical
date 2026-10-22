@@ -118,7 +118,8 @@
     const SUPABASE_URL = 'https://jvcrmdzwaiufjumjqtwu.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_PPkCcPkHpVshgAlnZShwvg__a4zSMPm';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
+let usuarioAtual = null;
+let perfilAtual = null;
     const el = id => document.getElementById(id);
     const sections = ['painel-gestao', 'area-login', 'solicitar-recuperacao', 'recuperar-senha'];
     let recuperando = false;
@@ -143,12 +144,14 @@
       const { data, error } = await supabaseClient.auth.getSession();
       if (error) console.warn('Erro ao verificar sessão:', error.code, error.message);
       if (data?.session) {
+        usuarioAtual = data.session.user;
         el('usuario-atual').textContent = `Conectado como: ${data.session.user.email || 'usuário'}`;
         mostrar('painel-gestao');
         await carregarCultos();
         await carregarEscalaBanda();
         await carregarEscalaVocal();
       } else {
+        usuarioAtual = null;
         mostrar('area-login');
       }
     }
@@ -163,12 +166,14 @@
       if (recuperando) return;
       if (evento === 'SIGNED_IN' || evento === 'INITIAL_SESSION' || evento === 'SIGNED_OUT') {
         if (sessao) {
+          usuarioAtual = sessao.user;
           el('usuario-atual').textContent = `Conectado como: ${sessao.user.email || 'usuário'}`;
           mostrar('painel-gestao');
           carregarCultos();
           carregarEscalaBanda();
           carregarEscalaVocal();
         } else {
+          usuarioAtual = null;
           mostrar('area-login');
         }
       }
@@ -331,17 +336,18 @@ data.forEach(escala => {
   }
         const item = document.createElement('p');
      item.textContent = `${escala.instrumento || 'Instrumento não informado'}: ${escala.musicos?.nome || 'Músico não identificado'}`;
-        const botaoEditar = document.createElement('button');
+  const podeEditarEscala = false;      
+  const botaoEditar = document.createElement('button');
 botaoEditar.textContent = 'Editar';
 botaoEditar.type = 'button';
-botaoEditar.disabled = true;
+botaoEditar.disabled = !podeEditarEscala;
 botaoEditar.title = 'Aguardando configuração das permissões';
 botaoEditar.style.marginRight = '8px';
 
 const botaoExcluir = document.createElement('button');
 botaoExcluir.textContent = 'Excluir';
 botaoExcluir.type = 'button';
-botaoExcluir.disabled = true;
+botaoExcluir.disabled = !podeEditarEscala;
 botaoExcluir.title = 'Aguardando configuração das permissões';
 
 item.appendChild(document.createElement('br'));
