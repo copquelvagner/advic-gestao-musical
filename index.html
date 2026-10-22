@@ -256,9 +256,17 @@
       const lista = el('lista-cultos');
       if (!lista) return;
       lista.textContent = 'Carregando calendário...';
+      const hoje = new Date();
+const ano = hoje.getFullYear();
+const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+
+const primeiroDia = `${ano}-${mes}-01`;
+const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate()}`;
       const { data, error } = await supabaseClient
         .from('cultos')
         .select('data_culto, periodo, horario, descricao')
+        .gte('data_culto', primeiroDia)
+.lte('data_culto', ultimoDia)
         .order('data_culto', { ascending: true })
         .order('horario', { ascending: true });
       if (error) {
