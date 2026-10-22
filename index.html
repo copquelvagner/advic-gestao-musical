@@ -67,6 +67,16 @@
         <h2>Escala do Vocal</h2>
         <p>Organize os cantores de cada culto.</p>
         <div id="lista-escala-vocal">Carregando escala vocal...</div>
+        <button type="button" id="btn-cadastrar-vocal" hidden>Cadastrar no Vocal</button>
+        <div id="formulario-escala-vocal" hidden>
+          <h3>Nova escala do Vocal</h3>
+          <label for="culto-vocal">Culto</label>
+          <select id="culto-vocal"><option value="">Selecione um culto</option></select>
+          <label for="cantor-vocal">Cantor(a)</label>
+          <select id="cantor-vocal"><option value="">Selecione um cantor</option></select>
+          <button type="button" id="btn-salvar-vocal">Salvar escala vocal</button>
+          <p id="mensagem-escala-vocal" class="status" role="status"></p>
+        </div>
       </section>
       <section class="cartao"><h2>Controle de Presença</h2><p>Acompanhe a participação dos integrantes.</p></section>
     </div>
@@ -185,6 +195,7 @@ let perfilAtual = null;
         await carregarCultos();
         await carregarEscalaBanda();
         await carregarEscalaVocal();
+        atualizarPermissoesCadastro();
       } else {
         usuarioAtual = null;
         mostrar('area-login');
@@ -204,12 +215,13 @@ let perfilAtual = null;
           usuarioAtual = sessao.user;
           el('usuario-atual').textContent = `Conectado como: ${sessao.user.email || 'usuário'}`;
           mostrar('painel-gestao');
-(async () => {
+setTimeout(async () => {
   await carregarPerfil();
+  atualizarPermissoesCadastro();
   await carregarCultos();
   await carregarEscalaBanda();
   await carregarEscalaVocal();
-})();
+}, 0);
        } else {
   usuarioAtual = null;
   perfilAtual = null;
@@ -410,6 +422,7 @@ if (!error && (!data || data.length === 0)) {
 
   alert('Músico removido da escala com sucesso!');
   await carregarEscalaBanda();
+  await carregarEscalaVocal();
 }
         async function carregarEscalaBanda() {
       const lista = el('lista-escala-banda');
@@ -490,30 +503,145 @@ item.appendChild(botaoExcluir);
       });
     }
 
+    function podeGerenciarDepartamento(departamentoId) {
+      return perfilAtual?.ativo === true && (
+        perfilAtual.papel === 'administrador' ||
+        (perfilAtual.papel === 'lider' &&
+          departamentosLiderados.some(id => String(id) === String(departamentoId)))
+      );
+    }
+
     async function carregarEscalaVocal() {
       const lista = el('lista-escala-vocal');
-      if (!lista) return;
       lista.textContent = 'Carregando escala vocal...';
       const { data, error } = await supabaseClient
         .from('escalas')
-        .select('*')
-        .eq('instrumento', 'Voz')
-        .limit(20);
+        .select('*, musicos(nome), cultos(data_culto, horario, descricao)')
+        .eq('instrumento', 'Voz');
       if (error) {
-        console.error('Erro ao carregar escala vocal:', error);
-        lista.textContent = 'Erro na escala vocal: ' + error.message;
+        lista.textContent = 'Não foi possível carregar a escala vocal.';
+        console.error('Erro na escala vocal:', error);
         return;
       }
       lista.replaceChildren();
-      if (!data || data.length === 0) {
+      const escalas = (data || []).sort((a, b) =>
+        `${a.cultos?.data_culto || ''} ${a.cultos?.horario || ''}`
+          .localeCompare(`${b.cultos?.data_culto || ''} ${b.cultos?.horario || ''}`)
+      );
+      if (!escalas.length) {
         lista.textContent = 'Nenhuma escala vocal encontrada.';
         return;
       }
-      data.forEach(escala => {
+      let ultimoCulto = '';
+      escalas.forEach(escala => {
+        const chave = String(escala.culto_id);
+        if (chave !== ultimoCulto) {
+          const titulo = document.createElement('h3');
+          const data = escala.cultos?.data_culto?.split('-').reverse().join('/') || 'Sem data';
+          const horario = escala.cultos?.horario?.slice(0, 5) || '';
+          titulo.textContent = `${data} - ${horario} - ${escala.cultos?.descricao || 'Culto'}`;
+          lista.appendChild(titulo);
+          ultimoCulto = chave;
+        }
         const item = document.createElement('p');
-        item.textContent = `Vocal: ${escala.instrumento}`;
+        item.textContent = escala.musicos?.nome || 'Cantor(a) não identificado(a)';
+        if (podeGerenciarDepartamento(escala.departamento_id)) {
+          const excluir = document.createElement('button');
+          excluir.type = 'button';
+          excluir.textContent = 'Excluir';
+          excluir.title = 'Remover cantor(a) desta escala';
+          excluir.addEventListener('click', () => excluirEscala(escala));
+          item.appendChild(document.createElement('br'));
+          item.appendChild(excluir);
+        }
         lista.appendChild(item);
       });
+    }
+
+    let cantoresVocal = [];
+
+    async function carregarOpcoesVocal() {
+      const mensagem = el('mensagem-escala-vocal');
+      const cultoSelect = el('culto-vocal');
+      const cantorSelect = el('cantor-vocal');
+      mensagem.textContent = 'Carregando cultos e cantores...';
+      cultoSelect.replaceChildren(new Option('Selecione um culto', ''));
+      cantorSelect.replaceChildren(new Option('Selecione um cantor', ''));
+      try {
+        const [resCultos, resMusicos] = await Promise.all([
+          supabaseClient.from('cultos')
+            .select('id, data_culto, horario, descricao')
+            .order('data_culto', { ascending: true }),
+          supabaseClient.from('musicos').select('*').order('nome', { ascending: true })
+        ]);
+        if (resCultos.error) throw resCultos.error;
+        if (resMusicos.error) throw resMusicos.error;
+        (resCultos.data || []).forEach(culto => {
+          const partes = (culto.data_culto || '').split('-');
+          const data = partes.length === 3
+            ? `${partes[2]}/${partes[1]}/${partes[0]}` : 'Sem data';
+          cultoSelect.add(new Option(
+            `${data} ${String(culto.horario || '').slice(0, 5)} - ${culto.descricao || 'Culto'}`,
+            culto.id
+          ));
+        });
+        cantoresVocal = (resMusicos.data || []).filter(m =>
+          m.ativo !== false &&
+          (/voz|vocal|cantor/i.test(String(m.instrumento_principal || '')) ||
+           /vocal/i.test(String(m.departamento || ''))) &&
+          podeGerenciarDepartamento(m.departamento_id)
+        );
+        cantoresVocal.forEach(m => cantorSelect.add(new Option(m.nome, m.id)));
+        mensagem.textContent = cantoresVocal.length ? '' :
+          'Nenhum cantor autorizado encontrado. Confira o departamento no cadastro.';
+      } catch (erro) {
+        mensagem.textContent = `Erro ao carregar opções: ${erro.message || erro}`;
+      }
+    }
+
+    el('btn-cadastrar-vocal').addEventListener('click', () => {
+      const formulario = el('formulario-escala-vocal');
+      formulario.hidden = !formulario.hidden;
+      if (!formulario.hidden) carregarOpcoesVocal();
+    });
+
+    el('btn-salvar-vocal').addEventListener('click', async () => {
+      const botao = el('btn-salvar-vocal');
+      const mensagem = el('mensagem-escala-vocal');
+      const cultoId = el('culto-vocal').value;
+      const cantor = cantoresVocal.find(m => String(m.id) === el('cantor-vocal').value);
+      if (!cultoId || !cantor) {
+        mensagem.textContent = 'Selecione o culto e o cantor.';
+        return;
+      }
+      if (!podeGerenciarDepartamento(cantor.departamento_id)) {
+        mensagem.textContent = 'Você não tem permissão para este departamento.';
+        return;
+      }
+      botao.disabled = true;
+      mensagem.textContent = 'Salvando...';
+      try {
+        const { error } = await supabaseClient.from('escalas').insert({
+          culto_id: cultoId,
+          musico_id: cantor.id,
+          departamento_id: cantor.departamento_id,
+          instrumento: 'Voz'
+        });
+        if (error) throw error;
+        mensagem.textContent = 'Cantor(a) cadastrado(a) na escala!';
+        await carregarEscalaVocal();
+      } catch (erro) {
+        mensagem.textContent = `Não foi possível salvar: ${erro.message || erro}`;
+      } finally {
+        botao.disabled = false;
+      }
+    });
+
+    function atualizarPermissoesCadastro() {
+      const admin = perfilAtual?.ativo === true && perfilAtual.papel === 'administrador';
+      const lider = perfilAtual?.ativo === true && perfilAtual.papel === 'lider';
+      el('btn-cadastrar-banda').hidden = !(admin || lider);
+      el('btn-cadastrar-vocal').hidden = !(admin || lider);
     }
 
     // Preenche os campos com os cultos e músicos cadastrados no Supabase.
