@@ -377,9 +377,7 @@ if (!error && (!data || data.length === 0)) {
   alert('A escala não foi alterada. Verifique suas permissões.');
   return;
 }
-    .from('escalas')
-    .update({ instrumento })
-    .eq('id', escala.id);
+    
 
   if (error) {
     alert('Não foi possível editar: ' + error.message);
