@@ -120,6 +120,40 @@
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let usuarioAtual = null;
 let perfilAtual = null;
+    let departamentosLiderados = [];
+    async function carregarPerfil() {
+  perfilAtual = null;
+  departamentosLiderados = [];
+
+  if (!usuarioAtual) return;
+
+  const { data, error } = await supabaseClient
+    .from('perfis')
+    .select('*')
+    .eq('usuario_id', usuarioAtual.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Erro ao carregar perfil:', error);
+    return;
+  }
+
+  perfilAtual = data;
+      if (perfilAtual?.papel === 'lider') {
+  const { data: vinculos, error: erroVinculos } = await supabaseClient
+    .from('lider_departamentos')
+    .select('departamento_id')
+    .eq('usuario_id', usuarioAtual.id);
+
+  if (erroVinculos) {
+    console.error('Erro ao carregar departamentos:', erroVinculos);
+  } else {
+    departamentosLiderados = (vinculos || []).map(
+      vinculo => vinculo.departamento_id
+    );
+  }
+}
+}
     const el = id => document.getElementById(id);
     const sections = ['painel-gestao', 'area-login', 'solicitar-recuperacao', 'recuperar-senha'];
     let recuperando = false;
@@ -147,6 +181,7 @@ let perfilAtual = null;
         usuarioAtual = data.session.user;
         el('usuario-atual').textContent = `Conectado como: ${data.session.user.email || 'usuário'}`;
         mostrar('painel-gestao');
+        await carregarPerfil();
         await carregarCultos();
         await carregarEscalaBanda();
         await carregarEscalaVocal();
@@ -169,13 +204,19 @@ let perfilAtual = null;
           usuarioAtual = sessao.user;
           el('usuario-atual').textContent = `Conectado como: ${sessao.user.email || 'usuário'}`;
           mostrar('painel-gestao');
-          carregarCultos();
-          carregarEscalaBanda();
-          carregarEscalaVocal();
-        } else {
-          usuarioAtual = null;
-          mostrar('area-login');
-        }
+(async () => {
+  await carregarPerfil();
+  await carregarCultos();
+  await carregarEscalaBanda();
+  await carregarEscalaVocal();
+})();
+       } else {
+  usuarioAtual = null;
+  perfilAtual = null;
+  departamentosLiderados = [];
+  mostrar('area-login');
+}
+    
       }
     });
 
@@ -293,8 +334,86 @@ const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate
         lista.appendChild(item);
       });
     }
+    async function editarEscala(escala) {
+  const novoInstrumento = prompt(
+    'Informe o instrumento para esta escala:',
+    escala.instrumento || ''
+  );
 
-    async function carregarEscalaBanda() {
+  if (novoInstrumento === null) return;
+
+  const instrumento = novoInstrumento.trim();
+      if (!['Teclado', 'Bateria', 'Guitarra', 'Violão', 'Baixo'].includes(instrumento)) {
+  alert('Instrumento inválido. Escolha: Teclado, Bateria, Guitarra, Violão ou Baixo.');
+  return;
+}
+
+  if (!instrumento) {
+    alert('O instrumento não pode ficar vazio.');
+    return;
+  }
+const { data: musico, error: erroMusico } = await supabaseClient
+  .from('musicos')
+  .select('instrumento_principal')
+  .eq('id', escala.musico_id)
+  .single();
+
+if (erroMusico || !musico) {
+  alert('Não foi possível verificar os instrumentos do músico.');
+  return;
+}
+
+if (!instrumentosDoMusico(musico).includes(instrumento)) {
+  alert('Este instrumento não está cadastrado para o músico selecionado.');
+  return;
+}
+  const { data, error } = await supabaseClient
+  .from('escalas')
+  .update({ instrumento })
+  .eq('id', escala.id)
+  .select('id');
+
+if (!error && (!data || data.length === 0)) {
+  alert('A escala não foi alterada. Verifique suas permissões.');
+  return;
+}
+    .from('escalas')
+    .update({ instrumento })
+    .eq('id', escala.id);
+
+  if (error) {
+    alert('Não foi possível editar: ' + error.message);
+    return;
+  }
+
+  alert('Instrumento atualizado com sucesso!');
+  await carregarEscalaBanda();
+}
+async function excluirEscala(escala) {
+  if (!confirm('Deseja realmente excluir este músico da escala?')) {
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+  .from('escalas')
+  .delete()
+  .eq('id', escala.id)
+  .select('id');
+
+if (!error && (!data || data.length === 0)) {
+  alert('O músico não foi removido. Verifique suas permissões.');
+  return;
+}
+
+  if (error) {
+    alert('Não foi possível excluir: ' + error.message);
+    return;
+  }
+
+  alert('Músico removido da escala com sucesso!');
+  await carregarEscalaBanda();
+}
+        async function carregarEscalaBanda() {
       const lista = el('lista-escala-banda');
       if (!lista) return;
       lista.textContent = 'Carregando escala...';
@@ -336,19 +455,35 @@ data.forEach(escala => {
   }
         const item = document.createElement('p');
      item.textContent = `${escala.instrumento || 'Instrumento não informado'}: ${escala.musicos?.nome || 'Músico não identificado'}`;
-  const podeEditarEscala = false;      
+  const podeEditarEscala = perfilAtual?.ativo === true && (
+  perfilAtual.papel === 'administrador' ||
+  (perfilAtual.papel === 'lider' &&
+   departamentosLiderados.includes(escala.departamento_id))
+);      
   const botaoEditar = document.createElement('button');
 botaoEditar.textContent = 'Editar';
 botaoEditar.type = 'button';
 botaoEditar.disabled = !podeEditarEscala;
-botaoEditar.title = 'Aguardando configuração das permissões';
+  botaoEditar.addEventListener('click', () => {
+  if (!podeEditarEscala) return;
+  editarEscala(escala);
+});
+botaoEditar.title = podeEditarEscala
+  ? 'Editar instrumento do músico'
+  : 'Você não tem permissão para editar esta escala';
 botaoEditar.style.marginRight = '8px';
 
 const botaoExcluir = document.createElement('button');
 botaoExcluir.textContent = 'Excluir';
 botaoExcluir.type = 'button';
 botaoExcluir.disabled = !podeEditarEscala;
-botaoExcluir.title = 'Aguardando configuração das permissões';
+  botaoExcluir.addEventListener('click', () => {
+  if (!podeEditarEscala) return;
+  excluirEscala(escala);
+});
+botaoExcluir.title = podeEditarEscala
+  ? 'Excluir músico desta escala'
+  : 'Você não tem permissão para excluir esta escala';
 
 item.appendChild(document.createElement('br'));
 item.appendChild(botaoEditar);
