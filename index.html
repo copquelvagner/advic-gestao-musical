@@ -296,8 +296,8 @@ const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate
       const { data, error } = await supabaseClient
         .from('escalas')
         .select('*, musicos(nome), cultos(data_culto, horario, descricao)')      
-        .neq('instrumento', 'Voz')
-        .limit(20);
+        .neq('instrumento', 'Voz');
+       
       if (error) {
         console.error('Erro ao carregar escala:', error);
         lista.textContent = 'Não foi possível carregar a escala.';
@@ -308,9 +308,29 @@ const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate
         lista.textContent = 'Nenhuma escala encontrada.';
         return;
       }
-      data.forEach(escala => {
+      data.sort((a, b) => {
+  const dataA = `${a.cultos?.data_culto || ''} ${a.cultos?.horario || ''}`;
+  const dataB = `${b.cultos?.data_culto || ''} ${b.cultos?.horario || ''}`;
+  return dataA.localeCompare(dataB);
+});
+
+let ultimoCulto = '';
+
+data.forEach(escala => {
+  const chaveCulto = `${escala.cultos?.data_culto || ''}-${escala.culto_id}`;
+
+  if (chaveCulto !== ultimoCulto) {
+    const titulo = document.createElement('h3');
+    const dataCulto = escala.cultos?.data_culto?.split('-').reverse().join('/') || 'Sem data';
+    const horario = escala.cultos?.horario?.slice(0, 5) || '';
+    const descricao = escala.cultos?.descricao || 'Culto';
+
+    titulo.textContent = `${dataCulto} - ${horario} - ${descricao}`;
+    lista.appendChild(titulo);
+    ultimoCulto = chaveCulto;
+  }
         const item = document.createElement('p');
-     item.textContent = `${escala.musicos?.nome || 'Músico não identificado'} - ${escala.instrumento || 'Instrumento não informado'} | ${escala.cultos?.data_culto?.split('-').reverse().join('/') || 'Sem data'} - ${escala.cultos?.horario?.slice(0, 5) || ''} - ${escala.cultos?.descricao || 'Culto'}`;
+     item.textContent = `${escala.instrumento || 'Instrumento não informado'}: ${escala.musicos?.nome || 'Músico não identificado'}`;
         const botaoEditar = document.createElement('button');
 botaoEditar.textContent = 'Editar';
 botaoEditar.type = 'button';
