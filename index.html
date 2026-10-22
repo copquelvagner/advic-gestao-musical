@@ -388,7 +388,7 @@
           !/^(voz|vocal)$/i.test(String(m.instrumento_principal || '').trim())
         );
         musicosBanda.forEach(m => seletorMusico.add(new Option(
-          `${m.nome} - ${m.instrumento_principal || 'Instrumento não informado'}`, m.id
+          m.nome, m.id
         )));
         mensagem.textContent = !resCultos.data?.length ? 'Não há cultos cadastrados.' :
           !musicosBanda.length ? 'Não há músicos disponíveis para a Banda.' : '';
