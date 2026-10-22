@@ -78,7 +78,16 @@
           <p id="mensagem-escala-vocal" class="status" role="status"></p>
         </div>
       </section>
-      <section class="cartao"><h2>Controle de Presença</h2><p>Acompanhe a participação dos integrantes.</p></section>
+      <section class="cartao">
+  <h2>Controle de Presença</h2>
+  <p>Registre a participação dos músicos e cantores em cada culto.</p>
+  <label for="culto-presenca">Selecione o culto</label>
+  <select id="culto-presenca" onchange="carregarListaPresenca()">
+    <option value="">Selecione um culto</option>
+  </select>
+  <div id="lista-presenca"></div>
+  <p id="mensagem-presenca" class="status" role="status"></p>
+</section>
     </div>
   </main>
 
@@ -193,6 +202,7 @@ let perfilAtual = null;
         mostrar('painel-gestao');
         await carregarPerfil();
         await carregarCultos();
+        await carregarCultosPresenca();
         await carregarEscalaBanda();
         await carregarEscalaVocal();
         atualizarPermissoesCadastro();
@@ -218,7 +228,7 @@ let perfilAtual = null;
 setTimeout(async () => {
   await carregarPerfil();
   atualizarPermissoesCadastro();
-  await carregarCultos();
+  await carregarCultosPresenca();
   await carregarEscalaBanda();
   await carregarEscalaVocal();
 }, 0);
@@ -346,6 +356,75 @@ const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate
         lista.appendChild(item);
       });
     }
+    async function carregarCultosPresenca() {
+  const seletor = document.getElementById('culto-presenca');
+  const mensagem = document.getElementById('mensagem-presenca');
+
+  if (!seletor) return;
+
+  seletor.replaceChildren(new Option('Selecione um culto', ''));
+
+  const { data, error } = await supabaseClient
+    .from('cultos')
+    .select('id, data_culto, horario, descricao')
+    .order('data_culto', { ascending: false })
+    .order('horario', { ascending: false });
+
+  if (error) {
+    mensagem.textContent = 'Erro ao carregar os cultos.';
+    console.error(error);
+    return;
+  }
+
+  (data || []).forEach(culto => {
+    const partes = (culto.data_culto || '').split('-');
+    const dataFormatada = partes.length === 3
+      ? `${partes[2]}/${partes[1]}/${partes[0]}`
+      : 'Sem data';
+
+    const horario = String(culto.horario || '').slice(0, 5);
+
+    seletor.add(new Option(
+      `${dataFormatada} - ${horario} - ${culto.descricao || 'Culto'}`,
+      culto.id
+    ));
+  });
+}
+async function carregarListaPresenca() {
+  const cultoId = document.getElementById('culto-presenca').value;
+  const lista = document.getElementById('lista-presenca');
+  const mensagem = document.getElementById('mensagem-presenca');
+
+  lista.replaceChildren();
+  mensagem.textContent = '';
+
+  if (!cultoId) return;
+
+  const { data, error } = await supabaseClient
+    .from('escalas')
+    .select('id, instrumento, departamento_id, musicos(nome)')
+    .eq('culto_id', cultoId);
+
+  if (error) {
+    mensagem.textContent = 'Erro ao carregar os escalados.';
+    console.error(error);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    mensagem.textContent = 'Nenhum músico ou cantor escalado neste culto.';
+    return;
+  }
+
+  data.forEach(escala => {
+    const item = document.createElement('p');
+    const nome = escala.musicos?.nome || 'Nome não encontrado';
+    item.textContent = `${nome} - ${escala.instrumento || 'Vocal'}`;
+    lista.appendChild(item);
+  });
+}
+
+    
     async function editarEscala(escala) {
   const novoInstrumento = prompt(
     'Informe o instrumento para esta escala:',
