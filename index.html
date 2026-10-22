@@ -303,6 +303,22 @@
       data.forEach(escala => {
         const item = document.createElement('p');
      item.textContent = `${escala.musicos?.nome || 'Músico não identificado'} - ${escala.instrumento || 'Instrumento não informado'} | ${escala.cultos?.data_culto?.split('-').reverse().join('/') || 'Sem data'} - ${escala.cultos?.horario?.slice(0, 5) || ''} - ${escala.cultos?.descricao || 'Culto'}`;
+        const botaoEditar = document.createElement('button');
+botaoEditar.textContent = 'Editar';
+botaoEditar.type = 'button';
+botaoEditar.disabled = true;
+botaoEditar.title = 'Aguardando configuração das permissões';
+botaoEditar.style.marginRight = '8px';
+
+const botaoExcluir = document.createElement('button');
+botaoExcluir.textContent = 'Excluir';
+botaoExcluir.type = 'button';
+botaoExcluir.disabled = true;
+botaoExcluir.title = 'Aguardando configuração das permissões';
+
+item.appendChild(document.createElement('br'));
+item.appendChild(botaoEditar);
+item.appendChild(botaoExcluir);
         lista.appendChild(item);
       });
     }
