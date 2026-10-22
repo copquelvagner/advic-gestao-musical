@@ -53,6 +53,8 @@
           <select id="culto-banda"><option value="">Selecione um culto</option></select>
           <label for="musico-banda">Músico</label>
           <select id="musico-banda"><option value="">Selecione um músico</option></select>
+          <label for="instrumento-banda">Instrumento neste culto</label>
+          <select id="instrumento-banda" disabled><option value="">Selecione primeiro um músico</option></select>
           <button type="button" id="btn-salvar-banda">Salvar escala</button>
           <p id="mensagem-escala-banda" class="status" role="status"></p>
         </div>
@@ -332,6 +334,29 @@
     let musicosBanda = [];
     let carregandoOpcoesBanda = false;
 
+    const instrumentosConhecidos = ['Teclado', 'Bateria', 'Guitarra', 'Violão', 'Baixo'];
+    function instrumentosDoMusico(musico) {
+      const texto = String(musico?.instrumento_principal || '');
+      return instrumentosConhecidos.filter(nome =>
+        new RegExp(nome.normalize('NFD').replace(/[\u0300-\u036f]/g, ''), 'i')
+          .test(texto.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+      );
+    }
+    function atualizarInstrumentosBanda() {
+      const seletor = el('instrumento-banda');
+      const musico = musicosBanda.find(m => String(m.id) === el('musico-banda').value);
+      const instrumentos = instrumentosDoMusico(musico);
+      seletor.replaceChildren(new Option('Selecione um instrumento', ''));
+      instrumentos.forEach(nome => seletor.add(new Option(nome, nome)));
+      seletor.disabled = instrumentos.length === 0;
+      if (musico && !instrumentos.length) {
+        el('mensagem-escala-banda').textContent = 'Não foi possível identificar o instrumento deste músico. Verifique o cadastro.';
+      } else {
+        el('mensagem-escala-banda').textContent = '';
+      }
+    }
+    el('musico-banda').addEventListener('change', atualizarInstrumentosBanda);
+
     async function carregarOpcoesBanda() {
       if (carregandoOpcoesBanda) return;
       carregandoOpcoesBanda = true;
@@ -341,6 +366,7 @@
       mensagem.textContent = 'Carregando cultos e músicos...';
       seletorCulto.replaceChildren(new Option('Selecione um culto', ''));
       seletorMusico.replaceChildren(new Option('Selecione um músico', ''));
+      atualizarInstrumentosBanda();
       try {
         const [resCultos, resMusicos] = await Promise.all([
           supabaseClient.from('cultos').select('id, data_culto, horario, descricao').order('data_culto', { ascending: true }),
@@ -385,13 +411,14 @@
       const mensagem = el('mensagem-escala-banda');
       const cultoId = el('culto-banda').value;
       const musicoId = el('musico-banda').value;
+      const instrumento = el('instrumento-banda').value;
       if (!cultoId || !musicoId) {
         mensagem.textContent = 'Selecione o culto e o músico antes de salvar.';
         return;
       }
       const musico = musicosBanda.find(m => String(m.id) === musicoId);
-      if (!musico || !musico.instrumento_principal) {
-        mensagem.textContent = 'O músico selecionado precisa ter um instrumento cadastrado.';
+      if (!musico || !instrumentosDoMusico(musico).includes(instrumento)) {
+        mensagem.textContent = 'Selecione um instrumento válido para este músico.';
         return;
       }
       botao.disabled = true;
@@ -400,7 +427,7 @@
         const registro = {
           culto_id: cultoId,
           musico_id: musicoId,
-          instrumento: musico.instrumento_principal
+          instrumento: instrumento
         };
         // Aproveita o identificador do departamento se existir no cadastro do músico.
         if (musico.departamento_id != null) registro.departamento_id = musico.departamento_id;
@@ -408,6 +435,8 @@
         if (error) throw error;
         mensagem.textContent = 'Músico cadastrado na escala com sucesso!';
         el('musico-banda').value = '';
+        atualizarInstrumentosBanda();
+        mensagem.textContent = 'Músico cadastrado na escala com sucesso!';
         await carregarEscalaBanda();
       } catch (erro) {
         mensagem.textContent = `Não foi possível salvar a escala: ${erro.message || erro}`;
