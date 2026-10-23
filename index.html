@@ -407,7 +407,25 @@ async function carregarListaPresenca() {
     .from('escalas')
     .select('id, instrumento, departamento_id, musicos(nome)')
     .eq('culto_id', cultoId);
+const { data: presencasSalvas, error: erroPresencasSalvas } =
+  await supabaseClient
+    .from('presencas')
+    .select('escala_id, situacao, chamadas!inner(culto_id)')
+    .eq('chamadas.culto_id', cultoId);
 
+if (erroPresencasSalvas) {
+  console.error('Erro ao consultar presenças:', erroPresencasSalvas);
+}
+  const { data: substitutosSalvos, error: erroSubstitutosSalvos } =
+  await supabaseClient
+    .from('participacoes_extras')
+    .select('escala_substituida_id, nome_avulso, chamadas!inner(culto_id)')
+    .eq('chamadas.culto_id', cultoId)
+    .eq('tipo', 'substituicao');
+
+if (erroSubstitutosSalvos) {
+  console.error('Erro ao consultar substitutos:', erroSubstitutosSalvos);
+}
   if (error) {
     mensagem.textContent = 'Erro ao carregar os integrantes.';
     console.error(error);
@@ -461,7 +479,13 @@ async function carregarListaPresenca() {
     });
 
     seletor.disabled = !podeGerenciarDepartamento(escala.departamento_id);
+const presencaAnterior = (presencasSalvas || []).find(
+  p => String(p.escala_id) === String(escala.id)
+);
 
+if (presencaAnterior) {
+  seletor.value = presencaAnterior.situacao;
+}
     item.appendChild(titulo);
     item.appendChild(seletor);
     lista.appendChild(item);
@@ -472,7 +496,14 @@ async function carregarListaPresenca() {
     campoSubstituto.dataset.substituiEscalaId = escala.id;
     campoSubstituto.disabled = seletor.disabled;
     campoSubstituto.hidden = true;
+const substitutoAnterior = (substitutosSalvos || []).find(
+  s => String(s.escala_substituida_id) === String(escala.id)
+);
 
+if (substitutoAnterior) {
+  campoSubstituto.value = substitutoAnterior.nome_avulso || '';
+  campoSubstituto.hidden = false;
+}
     seletor.addEventListener('change', () => {
       campoSubstituto.hidden =
         !['falta', 'justificada'].includes(seletor.value);
