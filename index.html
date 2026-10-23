@@ -120,7 +120,10 @@
     <option value="vocal">Vocal</option>
   </select>
   <button type="button" id="btn-gerar-relatorio">Gerar relatório</button>
-  <button type="button" id="btn-imprimir-relatorio" hidden>Imprimir / salvar PDF</button>
+  <button type="button" id="btn-imprimir-relatorio" hidden>Imprimir resumo / PDF</button>
+  <button type="button" id="btn-frequencia-culto">Frequência por culto</button>
+  <button type="button" id="btn-imprimir-frequencia" hidden>Imprimir frequência / PDF</button>
+  <div id="resultado-frequencia-culto"></div>
   <p id="mensagem-relatorio" class="status" role="status"></p>
   <div id="resultado-relatorio"></div>
 </div>
@@ -1428,6 +1431,138 @@ item.appendChild(botaoExcluir);
       janela.print();
     }
     el('btn-imprimir-relatorio').addEventListener('click', imprimirRelatorioSimples);
+
+    // Matriz mensal por culto. A ausência de registro nunca é convertida em falta.
+    let matrizFrequencia = null;
+    const escaparFrequencia = valor => String(valor ?? '').replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    async function gerarFrequenciaPorCulto() {
+      const mes = el('mes-relatorio').value;
+      const filtro = el('departamento-relatorio').value;
+      const alvo = el('resultado-frequencia-culto');
+      const msg = el('mensagem-relatorio');
+      const botao = el('btn-frequencia-culto');
+      alvo.replaceChildren();
+      el('btn-imprimir-frequencia').hidden = true;
+      matrizFrequencia = null;
+      if (!/^\d{4}-\d{2}$/.test(mes)) { msg.textContent = 'Escolha o mês.'; return; }
+      botao.disabled = true;
+      msg.textContent = 'Carregando frequência por culto...';
+      try {
+        const [ano, numero] = mes.split('-').map(Number);
+        const fim = `${mes}-${String(new Date(ano, numero, 0).getDate()).padStart(2,'0')}`;
+        const cultosRes = await supabaseClient.from('cultos')
+          .select('id,data_culto,horario,descricao').gte('data_culto',`${mes}-01`)
+          .lte('data_culto',fim).order('data_culto',{ascending:true}).order('horario',{ascending:true});
+        if (cultosRes.error) throw cultosRes.error;
+        const cultos = cultosRes.data || [];
+        if (!cultos.length) { msg.textContent = 'Não há cultos cadastrados no mês.'; return; }
+        const ids = cultos.map(c=>c.id);
+        const [escRes, chaRes] = await Promise.all([
+          supabaseClient.from('escalas').select('id,culto_id,musico_id,instrumento,musicos(nome)').in('culto_id',ids),
+          supabaseClient.from('chamadas').select('id,culto_id').in('culto_id',ids)
+        ]);
+        if (escRes.error) throw escRes.error;
+        if (chaRes.error) throw chaRes.error;
+        const escalas = escRes.data || [];
+        const chamadas = chaRes.data || [];
+        const idsCh = chamadas.map(c=>c.id);
+        let presencas = [], extras = [];
+        if (idsCh.length) {
+          const [pr,ex] = await Promise.all([
+            supabaseClient.from('presencas').select('chamada_id,escala_id,situacao').in('chamada_id',idsCh),
+            supabaseClient.from('participacoes_extras').select('chamada_id,escala_substituida_id,nome_avulso,tipo').in('chamada_id',idsCh).eq('tipo','substituicao')
+          ]);
+          if (pr.error) throw pr.error;
+          if (ex.error) throw ex.error;
+          presencas=pr.data||[]; extras=ex.data||[];
+        }
+        const escalasId = new Map(escalas.map(e=>[String(e.id),e]));
+        const chamadasId = new Map(chamadas.map(c=>[String(c.id),c]));
+        const pessoas = new Map();
+        function aceita(grupo) { return filtro==='todos'||filtro===grupo.toLowerCase(); }
+        function pessoa(chave,nome,grupo) {
+          if (!pessoas.has(chave)) pessoas.set(chave,{nome,grupo,marcas:new Map()});
+          return pessoas.get(chave);
+        }
+        // Inscritos: NE significa que não houve escala; SR indica escala sem registro.
+        escalas.forEach(e=>{
+          const grupo=e.instrumento==='Voz'?'Vocal':'Banda';
+          if (!aceita(grupo)) return;
+          const chave=`${grupo}:${e.musico_id||e.id}`;
+          pessoa(chave,e.musicos?.nome||'Nome não identificado',grupo)
+            .marcas.set(String(e.culto_id),'SR');
+        });
+        presencas.forEach(p=>{
+          const e=escalasId.get(String(p.escala_id));
+          if (!e) return;
+          const grupo=e.instrumento==='Voz'?'Vocal':'Banda';
+          if (!aceita(grupo)) return;
+          const cultoId=chamadasId.get(String(p.chamada_id))?.culto_id;
+          if (!cultoId) return;
+          const codigo=({presente:'P',falta:'F',justificada:'FJ'})[p.situacao]||'SR';
+          pessoa(`${grupo}:${e.musico_id||e.id}`,e.musicos?.nome||'Nome não identificado',grupo)
+            .marcas.set(String(cultoId),codigo);
+        });
+        extras.forEach(x=>{
+          const e=escalasId.get(String(x.escala_substituida_id));
+          if (!e) return;
+          const grupo=e.instrumento==='Voz'?'Vocal':'Banda';
+          if (!aceita(grupo)) return;
+          const cultoId=chamadasId.get(String(x.chamada_id))?.culto_id;
+          if (!cultoId) return;
+          const nome=(x.nome_avulso||'Substituto não identificado').trim();
+          const registro=pessoa(`${grupo}:sub:${nome.toLocaleLowerCase('pt-BR')}`,nome,grupo);
+          const anterior=registro.marcas.get(String(cultoId));
+          registro.marcas.set(String(cultoId),anterior==='S'?'S':'S');
+        });
+        const linhas=[...pessoas.values()].sort((a,b)=>a.grupo.localeCompare(b.grupo)||a.nome.localeCompare(b.nome,'pt-BR'))
+          .map(p=>{
+            const marcas=cultos.map(c=>p.marcas.get(String(c.id))||'NE');
+            return {nome:p.nome,grupo:p.grupo,marcas,totais:{P:marcas.filter(v=>v==='P').length,F:marcas.filter(v=>v==='F').length,FJ:marcas.filter(v=>v==='FJ').length,S:marcas.filter(v=>v==='S').length}};
+          });
+        matrizFrequencia={mes,filtro,cultos,linhas};
+        const tabela=document.createElement('table');
+        tabela.style.cssText='border-collapse:collapse;font-size:11px;white-space:nowrap;';
+        const cab=document.createElement('tr');
+        ['Integrante','Grupo',...cultos.map(c=>c.data_culto.slice(8)+'/'+c.data_culto.slice(5,7)), 'P','F','FJ','S'].forEach(v=>{
+          const th=document.createElement('th');th.textContent=v;th.style.cssText='padding:5px;border:1px solid #ccd5e0';cab.appendChild(th);
+        });tabela.appendChild(cab);
+        linhas.forEach(l=>{const tr=document.createElement('tr');
+          [l.nome,l.grupo,...l.marcas,l.totais.P,l.totais.F,l.totais.FJ,l.totais.S].forEach(v=>{
+            const td=document.createElement('td');td.textContent=v;td.style.cssText='padding:5px;border:1px solid #ccd5e0;text-align:center';tr.appendChild(td);
+          });tabela.appendChild(tr);
+        });
+        const titulo=document.createElement('h4');titulo.textContent=`Frequência por culto — ${mes.split('-').reverse().join('/')} — ${filtro==='todos'?'Banda e Vocal':filtro}`;
+        alvo.appendChild(titulo);
+        const legenda=document.createElement('p');legenda.textContent='P = Presente | F = Falta | FJ = Justificada | S = Substituiu | SR = Escalado, sem registro | NE = Não escalado (não é falta).';alvo.appendChild(legenda);
+        const rolagem=document.createElement('div');rolagem.style.overflowX='auto';rolagem.appendChild(tabela);alvo.appendChild(rolagem);
+        msg.textContent=`${cultos.length} culto(s) no mês; ${linhas.length} integrante(s) com escala ou participação registrada.`;
+        el('btn-imprimir-frequencia').hidden=false;
+      } catch(erro) { console.error(erro);msg.textContent='Erro ao gerar frequência: '+(erro.message||erro); }
+      finally { botao.disabled=false; }
+    }
+    function imprimirFrequenciaPorCulto() {
+      if (!matrizFrequencia) {el('mensagem-relatorio').textContent='Gere a frequência antes de imprimir.';return;}
+      const {mes,filtro,cultos,linhas}=matrizFrequencia;
+      const ths=['Integrante','Grupo',...cultos.map(c=>c.data_culto.slice(8)+'/'+c.data_culto.slice(5,7)),'P','F','FJ','S'];
+      const tabela=`<table><thead><tr>${ths.map(v=>`<th>${escaparFrequencia(v)}</th>`).join('')}</tr></thead><tbody>${linhas.map(l=>`<tr>${[l.nome,l.grupo,...l.marcas,l.totais.P,l.totais.F,l.totais.FJ,l.totais.S].map(v=>`<td>${escaparFrequencia(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      const tamanho=Math.max(5,Math.min(9,Math.floor(170/(cultos.length+8))));
+      const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Frequência por culto - ADVIC</title><style>
+        @page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#17243b;margin:0}
+        h1{text-align:center;font-size:15px;margin:0 0 3px}h2{text-align:center;font-size:11px;margin:0 0 10px;font-weight:normal}
+        table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:${tamanho}px}
+        th,td{border:1px solid #bbc6d2;padding:3px 1px;text-align:center;overflow-wrap:anywhere}
+        th:first-child,td:first-child{width:15%;text-align:left}th:nth-child(2),td:nth-child(2){width:7%}
+        thead{display:table-header-group}tr{break-inside:avoid}p{font-size:9px;margin-top:8px}
+        @media screen{body{padding:20px;max-width:297mm;margin:auto}}
+      </style></head><body><h1>ADVIC - Gestão Musical</h1><h2>Frequência por culto | ${escaparFrequencia(mes.split('-').reverse().join('/'))} | ${escaparFrequencia(filtro==='todos'?'Banda e Vocal':filtro)}</h2>${tabela}<p>P = Presente | F = Falta | FJ = Falta justificada | S = Substituiu | SR = Escalado sem registro | NE = Não escalado (não é falta).</p></body></html>`;
+      const janela=window.open('','_blank');
+      if(!janela){el('mensagem-relatorio').textContent='Permita pop-ups para imprimir.';return;}
+      janela.document.open();janela.document.write(html);janela.document.close();janela.focus();janela.print();
+    }
+    el('btn-frequencia-culto').addEventListener('click',gerarFrequenciaPorCulto);
+    el('btn-imprimir-frequencia').addEventListener('click',imprimirFrequenciaPorCulto);
 
     el('btn-consultar-historico').addEventListener('click', consultarHistorico);
     mostrarSessao();
