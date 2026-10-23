@@ -390,6 +390,7 @@ const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate
     ));
   });
 }
+
 async function carregarListaPresenca() {
   const cultoId = document.getElementById('culto-presenca').value;
   const lista = document.getElementById('lista-presenca');
@@ -400,29 +401,160 @@ async function carregarListaPresenca() {
 
   if (!cultoId) return;
 
+  mensagem.textContent = 'Carregando integrantes...';
+
   const { data, error } = await supabaseClient
     .from('escalas')
     .select('id, instrumento, departamento_id, musicos(nome)')
     .eq('culto_id', cultoId);
 
   if (error) {
-    mensagem.textContent = 'Erro ao carregar os escalados.';
+    mensagem.textContent = 'Erro ao carregar os integrantes.';
     console.error(error);
     return;
   }
 
   if (!data || data.length === 0) {
-    mensagem.textContent = 'Nenhum músico ou cantor escalado neste culto.';
+    mensagem.textContent = 'Nenhum integrante escalado neste culto.';
     return;
   }
 
-  data.forEach(escala => {
-    const item = document.createElement('p');
-    const nome = escala.musicos?.nome || 'Nome não encontrado';
-    item.textContent = `${nome} - ${escala.instrumento || 'Vocal'}`;
+  mensagem.textContent = '';
+
+  const escalasOrdenadas = [...data].sort((a, b) => {
+    const grupoA = a.instrumento === 'Voz' ? 1 : 0;
+    const grupoB = b.instrumento === 'Voz' ? 1 : 0;
+
+    return grupoA - grupoB ||
+      (a.musicos?.nome || '').localeCompare(b.musicos?.nome || '');
+  });
+
+  let ultimoGrupo = '';
+
+  escalasOrdenadas.forEach(escala => {
+    const grupo = escala.instrumento === 'Voz' ? 'Vocal' : 'Banda';
+
+    if (grupo !== ultimoGrupo) {
+      const tituloGrupo = document.createElement('h3');
+      tituloGrupo.textContent = grupo;
+      lista.appendChild(tituloGrupo);
+      ultimoGrupo = grupo;
+    }
+
+    const item = document.createElement('div');
+    const titulo = document.createElement('p');
+
+    titulo.textContent =
+      `${escala.musicos?.nome || 'Nome não encontrado'} - ${escala.instrumento || 'Vocal'}`;
+
+    const seletor = document.createElement('select');
+    seletor.dataset.escalaId = escala.id;
+    seletor.dataset.departamentoId = escala.departamento_id || '';
+
+    [
+      ['', 'Selecione a presença'],
+      ['presente', 'Presente'],
+      ['falta', 'Falta'],
+      ['justificada', 'Falta justificada']
+    ].forEach(([valor, texto]) => {
+      seletor.add(new Option(texto, valor));
+    });
+
+    seletor.disabled = !podeGerenciarDepartamento(escala.departamento_id);
+
+    item.appendChild(titulo);
+    item.appendChild(seletor);
     lista.appendChild(item);
   });
+
+  const botaoSalvar = document.createElement('button');
+  botaoSalvar.type = 'button';
+  botaoSalvar.textContent = 'Salvar Presenças';
+  botaoSalvar.disabled = !escalasOrdenadas.some(escala =>
+    podeGerenciarDepartamento(escala.departamento_id)
+  );
+  botaoSalvar.onclick = salvarPresencas;
+
+  lista.appendChild(botaoSalvar);
 }
+
+    
+async function salvarPresencas() {
+  const cultoId = document.getElementById('culto-presenca').value;
+  const mensagem = document.getElementById('mensagem-presenca');
+  const seletores = document.querySelectorAll(
+    '#lista-presenca select[data-escala-id]:not(:disabled)'
+  );
+
+  if (!cultoId || !seletores.length) {
+    mensagem.textContent = 'Não há integrantes autorizados para registrar.';
+    return;
+  }
+
+  const registros = Array.from(seletores).map(seletor => ({
+    escalaId: seletor.dataset.escalaId,
+    departamentoId: seletor.dataset.departamentoId,
+    situacao: seletor.value
+  }));
+
+  if (registros.some(r => !r.situacao || !r.departamentoId)) {
+    mensagem.textContent = 'Preencha todas as presenças e confira os departamentos.';
+    return;
+  }
+
+  const { data: usuarioData, error: erroUsuario } =
+    await supabaseClient.auth.getUser();
+
+  if (erroUsuario || !usuarioData?.user) {
+    mensagem.textContent = 'Faça login para registrar as presenças.';
+    return;
+  }
+
+  mensagem.textContent = 'Salvando presenças...';
+
+  try {
+    const departamentos = [...new Set(registros.map(r => r.departamentoId))];
+
+    for (const departamentoId of departamentos) {
+      if (!podeGerenciarDepartamento(departamentoId)) {
+        throw new Error('Sem permissão para este departamento.');
+      }
+
+      const { data: chamada, error: erroChamada } = await supabaseClient
+        .from('chamadas')
+        .upsert({
+          culto_id: cultoId,
+          departamento_id: departamentoId,
+          registrado_por: usuarioData.user.id
+        }, { onConflict: 'culto_id,departamento_id' })
+        .select('id')
+        .single();
+
+      if (erroChamada) throw erroChamada;
+
+      const presencas = registros
+        .filter(r => r.departamentoId === departamentoId)
+        .map(r => ({
+          chamada_id: chamada.id,
+          escala_id: r.escalaId,
+          situacao: r.situacao
+        }));
+
+      const { error: erroPresencas } = await supabaseClient
+        .from('presencas')
+        .upsert(presencas, { onConflict: 'escala_id' });
+
+      if (erroPresencas) throw erroPresencas;
+    }
+
+    mensagem.textContent = 'Presenças salvas com sucesso!';
+  } catch (erro) {
+    console.error('Erro ao salvar presenças:', erro);
+    mensagem.textContent = 'Erro ao salvar: ' + (erro.message || erro);
+  }
+}
+
+
 
     
     async function editarEscala(escala) {
