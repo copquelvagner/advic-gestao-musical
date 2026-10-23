@@ -1542,25 +1542,100 @@ item.appendChild(botaoExcluir);
       } catch(erro) { console.error(erro);msg.textContent='Erro ao gerar frequência: '+(erro.message||erro); }
       finally { botao.disabled=false; }
     }
-    function imprimirFrequenciaPorCulto() {
-      if (!matrizFrequencia) {el('mensagem-relatorio').textContent='Gere a frequência antes de imprimir.';return;}
-      const {mes,filtro,cultos,linhas}=matrizFrequencia;
-      const ths=['Integrante','Grupo',...cultos.map(c=>c.data_culto.slice(8)+'/'+c.data_culto.slice(5,7)),'P','F','FJ','S'];
-      const tabela=`<table><thead><tr>${ths.map(v=>`<th>${escaparFrequencia(v)}</th>`).join('')}</tr></thead><tbody>${linhas.map(l=>`<tr>${[l.nome,l.grupo,...l.marcas,l.totais.P,l.totais.F,l.totais.FJ,l.totais.S].map(v=>`<td>${escaparFrequencia(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-      const tamanho=12;
-      const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Frequência por culto - ADVIC</title><style>
-        @page{size:A3 landscape;margin:7mm}
-        h1{text-align:center;font-size:15px;margin:0 0 3px}h2{text-align:center;font-size:11px;margin:0 0 10px;font-weight:normal}
-        table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:${tamanho}px}
-        th,td{border:1px solid #bbc6d2;padding:3px 1px;text-align:center;overflow-wrap:anywhere}
-        th:first-child,td:first-child{width:20%;text-align:left}th:nth-child(2),td:nth-child(2){width:8%}
-        thead{display:table-header-group}tr{break-inside:avoid}p{font-size:9px;margin-top:8px}
-        @media screen{body{padding:20px;max-width:297mm;margin:auto}}
-      </style></head><body><h1>ADVIC - Gestão Musical</h1><h2>Frequência por culto | ${escaparFrequencia(mes.split('-').reverse().join('/'))} | ${escaparFrequencia(filtro==='todos'?'Banda e Vocal':filtro)}</h2>${tabela}<p>P = Presente | F = Falta | FJ = Falta justificada | S = Substituiu | SR = Escalado sem registro | NE = Não escalado (não é falta).</p></body></html>`;
-      const janela=window.open('','_blank');
-      if(!janela){el('mensagem-relatorio').textContent='Permita pop-ups para imprimir.';return;}
-      janela.document.open();janela.document.write(html);janela.document.close();janela.focus();janela.print();
-    }
+   
+function imprimirFrequenciaPorCulto() {
+  if (!matrizFrequencia) {
+    el('mensagem-relatorio').textContent = 'Gere a frequência antes de imprimir.';
+    return;
+  }
+
+  const { mes, filtro, cultos, linhas } = matrizFrequencia;
+  const tamanhoBloco = 7;
+  const blocos = [];
+
+  for (let inicio = 0; inicio < cultos.length; inicio += tamanhoBloco) {
+    const cultosBloco = cultos.slice(inicio, inicio + tamanhoBloco);
+    const cabecalhos = [
+      'Integrante',
+      'Grupo',
+      ...cultosBloco.map(c => c.data_culto.slice(8) + '/' + c.data_culto.slice(5, 7))
+    ];
+
+    const linhasHtml = linhas.map(l => {
+      const marcas = l.marcas.slice(inicio, inicio + tamanhoBloco);
+      const valores = [l.nome, l.grupo, ...marcas];
+
+      return '<tr>' + valores.map(v =>
+        '<td>' + escaparFrequencia(v) + '</td>'
+      ).join('') + '</tr>';
+    }).join('');
+
+    blocos.push(`
+      <section class="pagina">
+        <h1>ADVIC - Gestão Musical</h1>
+        <h2>Frequência por culto | ${escaparFrequencia(mes.split('-').reverse().join('/'))}</h2>
+        <h3>${escaparFrequencia(filtro === 'todos' ? 'Banda e Vocal' : filtro)}
+          — Cultos ${inicio + 1} a ${Math.min(inicio + tamanhoBloco, cultos.length)}
+        </h3>
+        <table>
+          <thead>
+            <tr>${cabecalhos.map(v =>
+              '<th>' + escaparFrequencia(v) + '</th>'
+            ).join('')}</tr>
+          </thead>
+          <tbody>${linhasHtml}</tbody>
+        </table>
+        <p>P = Presente | F = Falta | FJ = Falta justificada |
+        S = Substituiu | SR = Escalado sem registro |
+        NE = Não escalado (não é falta).</p>
+      </section>
+    `);
+  }
+
+  const html = `<!DOCTYPE html>
+  <html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Frequência por culto - ADVIC</title>
+    <style>
+      @page { size: A4 landscape; margin: 10mm; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; color: #17243b; margin: 0; }
+      h1 { text-align: center; font-size: 20px; margin: 0 0 5px; }
+      h2 { text-align: center; font-size: 15px; margin: 0 0 5px; }
+      h3 { text-align: center; font-size: 13px; margin: 0 0 15px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+      th, td { border: 1px solid #bbc6d2; padding: 7px 5px; text-align: center; }
+      th:first-child, td:first-child { width: 28%; text-align: left; }
+      th:nth-child(2), td:nth-child(2) { width: 12%; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      p { font-size: 11px; margin-top: 12px; }
+      .pagina { break-after: page; page-break-after: always; }
+      .pagina:last-child { break-after: auto; page-break-after: auto; }
+      @media screen {
+        body { padding: 20px; }
+        .pagina { max-width: 277mm; margin: 0 auto 30px; }
+      }
+    </style>
+  </head>
+  <body>${blocos.join('')}</body>
+  </html>`;
+
+  const janela = window.open('', '_blank');
+
+  if (!janela) {
+    el('mensagem-relatorio').textContent = 'Permita pop-ups para imprimir.';
+    return;
+  }
+
+  janela.document.open();
+  janela.document.write(html);
+  janela.document.close();
+  janela.focus();
+  janela.print();
+}
+
     el('btn-frequencia-culto').addEventListener('click',gerarFrequenciaPorCulto);
     el('btn-imprimir-frequencia').addEventListener('click',imprimirFrequenciaPorCulto);
 
