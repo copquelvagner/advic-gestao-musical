@@ -465,6 +465,23 @@ async function carregarListaPresenca() {
     item.appendChild(titulo);
     item.appendChild(seletor);
     lista.appendChild(item);
+    
+    const campoSubstituto = document.createElement('input');
+    campoSubstituto.type = 'text';
+    campoSubstituto.placeholder = 'Quem substituiu? Digite o nome';
+    campoSubstituto.dataset.substituiEscalaId = escala.id;
+    campoSubstituto.disabled = seletor.disabled;
+    campoSubstituto.hidden = true;
+
+    seletor.addEventListener('change', () => {
+      campoSubstituto.hidden =
+        !['falta', 'justificada'].includes(seletor.value);
+
+      if (campoSubstituto.hidden) campoSubstituto.value = '';
+    });
+
+    item.appendChild(campoSubstituto);
+
   });
 
   const botaoSalvar = document.createElement('button');
@@ -491,11 +508,16 @@ async function salvarPresencas() {
     return;
   }
 
-  const registros = Array.from(seletores).map(seletor => ({
-    escalaId: seletor.dataset.escalaId,
-    departamentoId: seletor.dataset.departamentoId,
-    situacao: seletor.value
-  }));
+  
+const registros = Array.from(seletores).map(seletor => ({
+  escalaId: seletor.dataset.escalaId,
+  departamentoId: seletor.dataset.departamentoId,
+  situacao: seletor.value,
+  substituto: document.querySelector(
+    `input[data-substitui-escala-id="${seletor.dataset.escalaId}"]`
+  )?.value.trim() || ''
+}));
+
 
   if (registros.some(r => !r.situacao || !r.departamentoId)) {
     mensagem.textContent = 'Preencha todas as presenças e confira os departamentos.';
@@ -545,6 +567,48 @@ async function salvarPresencas() {
         .upsert(presencas, { onConflict: 'escala_id' });
 
       if (erroPresencas) throw erroPresencas;
+
+      
+
+      const substituicoes = registros.filter(r =>
+        r.departamentoId === departamentoId &&
+        r.substituto &&
+        ['falta', 'justificada'].includes(r.situacao)
+      );
+
+      for (const registro of substituicoes) {
+        
+        const { data: existentes, error: erroConsulta } = await supabaseClient
+          .from('participacoes_extras')
+          .select('id')
+          .eq('chamada_id', chamada.id)
+          .eq('escala_substituida_id', registro.escalaId)
+          .eq('tipo', 'substituicao')
+          .limit(1);
+
+        if (erroConsulta) throw erroConsulta;
+
+        if (existentes && existentes.length > 0) {
+          continue;
+          
+        }
+
+        const { error: erroSubstituto } = await supabaseClient
+          .from('participacoes_extras')
+          .insert({
+            chamada_id: chamada.id,
+            escala_substituida_id: registro.escalaId,
+            nome_avulso: registro.substituto,
+            instrumento: document.querySelector(
+              `select[data-escala-id="${registro.escalaId}"]`
+            )?.closest('div')?.querySelector('p')?.textContent?.split(' - ').pop() || 'Não informado',
+            tipo: 'substituicao'
+          });
+
+        if (erroSubstituto) throw erroSubstituto;
+      }
+
+      
     }
 
     mensagem.textContent = 'Presenças salvas com sucesso!';
