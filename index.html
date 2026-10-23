@@ -1547,13 +1547,13 @@ item.appendChild(botaoExcluir);
       const {mes,filtro,cultos,linhas}=matrizFrequencia;
       const ths=['Integrante','Grupo',...cultos.map(c=>c.data_culto.slice(8)+'/'+c.data_culto.slice(5,7)),'P','F','FJ','S'];
       const tabela=`<table><thead><tr>${ths.map(v=>`<th>${escaparFrequencia(v)}</th>`).join('')}</tr></thead><tbody>${linhas.map(l=>`<tr>${[l.nome,l.grupo,...l.marcas,l.totais.P,l.totais.F,l.totais.FJ,l.totais.S].map(v=>`<td>${escaparFrequencia(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-      const tamanho=Math.max(5,Math.min(9,Math.floor(170/(cultos.length+8))));
+      const tamanho=12;
       const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Frequência por culto - ADVIC</title><style>
-        @page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#17243b;margin:0}
+        @page{size:A3 landscape;margin:7mm}
         h1{text-align:center;font-size:15px;margin:0 0 3px}h2{text-align:center;font-size:11px;margin:0 0 10px;font-weight:normal}
         table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:${tamanho}px}
         th,td{border:1px solid #bbc6d2;padding:3px 1px;text-align:center;overflow-wrap:anywhere}
-        th:first-child,td:first-child{width:15%;text-align:left}th:nth-child(2),td:nth-child(2){width:7%}
+        th:first-child,td:first-child{width:20%;text-align:left}th:nth-child(2),td:nth-child(2){width:8%}
         thead{display:table-header-group}tr{break-inside:avoid}p{font-size:9px;margin-top:8px}
         @media screen{body{padding:20px;max-width:297mm;margin:auto}}
       </style></head><body><h1>ADVIC - Gestão Musical</h1><h2>Frequência por culto | ${escaparFrequencia(mes.split('-').reverse().join('/'))} | ${escaparFrequencia(filtro==='todos'?'Banda e Vocal':filtro)}</h2>${tabela}<p>P = Presente | F = Falta | FJ = Falta justificada | S = Substituiu | SR = Escalado sem registro | NE = Não escalado (não é falta).</p></body></html>`;
