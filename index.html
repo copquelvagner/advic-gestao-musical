@@ -1380,7 +1380,54 @@ item.appendChild(botaoExcluir);
     }
     el('mes-relatorio').value = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     el('btn-gerar-relatorio').addEventListener('click', gerarRelatorioMensal);
-    el('btn-imprimir-relatorio').addEventListener('click', () => window.print());
+    // Imprime somente o resumo mensal, sem o painel ou a lista detalhada.
+    function imprimirRelatorioSimples() {
+      const resultado = el('resultado-relatorio');
+      const tabela = resultado.querySelector('table');
+      const titulo = resultado.querySelector('h4');
+      if (!tabela || !titulo) {
+        el('mensagem-relatorio').textContent = 'Gere o relatório antes de imprimir.';
+        return;
+      }
+      const janela = window.open('', '_blank');
+      if (!janela) {
+        el('mensagem-relatorio').textContent = 'O navegador bloqueou a impressão. Permita pop-ups para este site.';
+        return;
+      }
+      const escapar = texto => String(texto).replace(/[&<>"']/g, caractere => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[caractere]));
+      const cabecalhos = Array.from(tabela.querySelectorAll('tr:first-child th')).map(c => c.textContent);
+      const linhas = Array.from(tabela.querySelectorAll('tr')).slice(1).map(tr =>
+        Array.from(tr.querySelectorAll('td')).map(td => td.textContent)
+      );
+      const titulosCurtos = ['Integrante', 'Grupo', 'Pres.', 'Faltas', 'Justif.', 'Subst.'];
+      const tabelaHtml = `<table><thead><tr>${titulosCurtos.map(t => `<th>${escapar(t)}</th>`).join('')}</tr></thead><tbody>${linhas.map(linha => `<tr>${linha.map(valor => `<td>${escapar(valor)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      const pagina = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório Mensal - ADVIC</title><style>
+        @page { size: A4 portrait; margin: 12mm; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; color: #17243b; margin: 0; font-size: 10px; }
+        header { text-align: center; border-bottom: 1px solid #bbb; padding-bottom: 7px; margin-bottom: 12px; }
+        h1 { font-size: 17px; margin: 0 0 4px; }
+        h2 { font-size: 12px; margin: 0; font-weight: normal; }
+        .sub { text-align: center; font-size: 11px; margin: 0 0 12px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10px; }
+        th, td { padding: 5px 4px; border-bottom: 1px solid #dce3eb; text-align: center; overflow-wrap: anywhere; }
+        th:first-child, td:first-child { width: 33%; text-align: left; }
+        th:nth-child(2), td:nth-child(2) { width: 15%; }
+        thead { display: table-header-group; }
+        tr { break-inside: avoid; page-break-inside: avoid; }
+        footer { margin-top: 12px; font-size: 9px; color: #555; }
+        @media screen { body { max-width: 210mm; margin: 20px auto; padding: 12mm; box-shadow: 0 0 8px #ccc; } }
+        @media print { body { padding: 0; } }
+      </style></head><body><header><h1>ADVIC - Gestão Musical</h1><h2>Ministério Vinde a Ceifa</h2></header><p class="sub">${escapar(titulo.textContent)}</p>${tabelaHtml}<footer>Total de integrantes e substitutos: ${linhas.length}. Substituições são contadas separadamente das presenças.</footer></body></html>`;
+      janela.document.open();
+      janela.document.write(pagina);
+      janela.document.close();
+      janela.focus();
+      janela.print();
+    }
+    el('btn-imprimir-relatorio').addEventListener('click', imprimirRelatorioSimples);
 
     el('btn-consultar-historico').addEventListener('click', consultarHistorico);
     mostrarSessao();
