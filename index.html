@@ -110,7 +110,20 @@
 <h3>Relatórios Mensais</h3>
 <p>Acompanhe a frequência dos integrantes da Banda e do Vocal.</p>
 
-<div id="relatorios-mensais"></div>
+<div id="relatorios-mensais">
+  <label for="mes-relatorio">Mês do relatório</label>
+  <input id="mes-relatorio" type="month">
+  <label for="departamento-relatorio">Departamento</label>
+  <select id="departamento-relatorio">
+    <option value="todos">Banda e Vocal</option>
+    <option value="banda">Banda</option>
+    <option value="vocal">Vocal</option>
+  </select>
+  <button type="button" id="btn-gerar-relatorio">Gerar relatório</button>
+  <button type="button" id="btn-imprimir-relatorio" hidden>Imprimir / salvar PDF</button>
+  <p id="mensagem-relatorio" class="status" role="status"></p>
+  <div id="resultado-relatorio"></div>
+</div>
 </section>
     </div>
   </main>
@@ -1189,6 +1202,185 @@ item.appendChild(botaoExcluir);
         botao.disabled = false;
       }
     });
+
+
+    // Relatórios de presença por mês, com base nos registros salvos.
+    function formatarDataRelatorio(data) {
+      if (!data) return '';
+      const partes = data.split('-');
+      return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : data;
+    }
+
+    function criarCelulaRelatorio(linha, texto, cabecalho = false) {
+      const celula = document.createElement(cabecalho ? 'th' : 'td');
+      celula.textContent = String(texto);
+      celula.style.padding = '8px';
+      celula.style.borderBottom = '1px solid #dce3eb';
+      celula.style.textAlign = cabecalho ? 'center' : 'left';
+      linha.appendChild(celula);
+      return celula;
+    }
+
+    async function gerarRelatorioMensal() {
+      const mes = el('mes-relatorio').value;
+      const departamento = el('departamento-relatorio').value;
+      const mensagem = el('mensagem-relatorio');
+      const resultado = el('resultado-relatorio');
+      const botao = el('btn-gerar-relatorio');
+      const imprimir = el('btn-imprimir-relatorio');
+      resultado.replaceChildren();
+      imprimir.hidden = true;
+      if (!/^\d{4}-\d{2}$/.test(mes)) {
+        mensagem.textContent = 'Escolha um mês para consultar.';
+        return;
+      }
+      botao.disabled = true;
+      mensagem.textContent = 'Gerando relatório...';
+      try {
+        const inicio = `${mes}-01`;
+        const [ano, numeroMes] = mes.split('-').map(Number);
+        const fim = `${ano}-${String(numeroMes).padStart(2, '0')}-${String(new Date(ano, numeroMes, 0).getDate()).padStart(2, '0')}`;
+        const cultosResp = await supabaseClient.from('cultos')
+          .select('id, data_culto, horario, descricao')
+          .gte('data_culto', inicio).lte('data_culto', fim)
+          .order('data_culto', { ascending: true });
+        if (cultosResp.error) throw cultosResp.error;
+        const cultos = cultosResp.data || [];
+        if (!cultos.length) {
+          mensagem.textContent = 'Não há cultos cadastrados neste mês.';
+          return;
+        }
+        const idsCultos = cultos.map(c => c.id);
+        const chamadasResp = await supabaseClient.from('chamadas')
+          .select('id, culto_id, departamento_id').in('culto_id', idsCultos);
+        if (chamadasResp.error) throw chamadasResp.error;
+        const chamadas = chamadasResp.data || [];
+        if (!chamadas.length) {
+          mensagem.textContent = 'Não há presenças registradas neste mês.';
+          return;
+        }
+        const idsChamadas = chamadas.map(c => c.id);
+        const [presencasResp, extrasResp] = await Promise.all([
+          supabaseClient.from('presencas')
+            .select('chamada_id, escala_id, situacao').in('chamada_id', idsChamadas),
+          supabaseClient.from('participacoes_extras')
+            .select('chamada_id, escala_substituida_id, nome_avulso, tipo')
+            .in('chamada_id', idsChamadas).eq('tipo', 'substituicao')
+        ]);
+        if (presencasResp.error) throw presencasResp.error;
+        if (extrasResp.error) throw extrasResp.error;
+        const presencas = presencasResp.data || [];
+        const extras = extrasResp.data || [];
+        const idsEscalas = [...new Set([
+          ...presencas.map(p => p.escala_id),
+          ...extras.map(e => e.escala_substituida_id)
+        ].filter(Boolean))];
+        let escalas = [];
+        if (idsEscalas.length) {
+          const escalasResp = await supabaseClient.from('escalas')
+            .select('id, instrumento, musico_id, musicos(nome)').in('id', idsEscalas);
+          if (escalasResp.error) throw escalasResp.error;
+          escalas = escalasResp.data || [];
+        }
+        const escalaPorId = new Map(escalas.map(e => [String(e.id), e]));
+        const chamadaPorId = new Map(chamadas.map(c => [String(c.id), c]));
+        const cultoPorId = new Map(cultos.map(c => [String(c.id), c]));
+        const totais = new Map();
+        const linhasDetalhes = [];
+        function obterLinha(nome, grupo, idUnico) {
+          const chave = `${grupo}|${idUnico}`;
+          if (!totais.has(chave)) totais.set(chave, {
+            nome, grupo, presente: 0, falta: 0, justificada: 0, substituicoes: 0
+          });
+          return totais.get(chave);
+        }
+        function grupoDaEscala(escala) {
+          return escala?.instrumento === 'Voz' ? 'Vocal' : 'Banda';
+        }
+        function incluirGrupo(grupo) {
+          return departamento === 'todos' || departamento === grupo.toLowerCase();
+        }
+        presencas.forEach(p => {
+          const escala = escalaPorId.get(String(p.escala_id));
+          if (!escala) return;
+          const grupo = grupoDaEscala(escala);
+          if (!incluirGrupo(grupo)) return;
+          const nome = escala.musicos?.nome || 'Nome não identificado';
+          const linha = obterLinha(nome, grupo, escala.musico_id || p.escala_id);
+          if (p.situacao === 'presente') linha.presente++;
+          else if (p.situacao === 'justificada') linha.justificada++;
+          else if (p.situacao === 'falta') linha.falta++;
+          const culto = cultoPorId.get(String(chamadaPorId.get(String(p.chamada_id))?.culto_id));
+          linhasDetalhes.push({
+            data: culto?.data_culto || '', nome, grupo,
+            descricao: p.situacao === 'presente' ? 'Presente' :
+              p.situacao === 'justificada' ? 'Falta justificada' : 'Falta'
+          });
+        });
+        extras.forEach(e => {
+          const escala = escalaPorId.get(String(e.escala_substituida_id));
+          const grupo = grupoDaEscala(escala);
+          if (!incluirGrupo(grupo)) return;
+          const nome = (e.nome_avulso || '').trim() || 'Substituto não identificado';
+          // Substitutos são identificados pelo nome informado no registro.
+          const linha = obterLinha(nome, grupo, `sub:${nome.toLocaleLowerCase('pt-BR')}`);
+          linha.substituicoes++;
+          const culto = cultoPorId.get(String(chamadaPorId.get(String(e.chamada_id))?.culto_id));
+          linhasDetalhes.push({ data: culto?.data_culto || '', nome, grupo,
+            descricao: `Substituiu ${escala?.musicos?.nome || 'integrante'}` });
+        });
+        if (!totais.size) {
+          mensagem.textContent = 'Não há registros para o departamento e mês selecionados.';
+          return;
+        }
+        const titulo = document.createElement('h4');
+        titulo.textContent = `Frequência — ${mes.split('-').reverse().join('/')} — ${departamento === 'todos' ? 'Banda e Vocal' : departamento === 'banda' ? 'Banda' : 'Vocal'}`;
+        resultado.appendChild(titulo);
+        const dica = document.createElement('p');
+        dica.textContent = 'Substituições são contabilizadas separadamente das presenças dos integrantes escalados.';
+        resultado.appendChild(dica);
+        const cont = document.createElement('div');
+        cont.style.overflowX = 'auto';
+        const tabela = document.createElement('table');
+        tabela.style.width = '100%';
+        tabela.style.borderCollapse = 'collapse';
+        tabela.style.fontSize = '13px';
+        const cabecalho = document.createElement('tr');
+        ['Integrante', 'Grupo', 'Presenças', 'Faltas', 'Justificadas', 'Substituições'].forEach(t => criarCelulaRelatorio(cabecalho, t, true));
+        tabela.appendChild(cabecalho);
+        const registros = [...totais.values()].sort((a, b) =>
+          a.grupo.localeCompare(b.grupo) || a.nome.localeCompare(b.nome, 'pt-BR'));
+        registros.forEach(r => {
+          const tr = document.createElement('tr');
+          [r.nome, r.grupo, r.presente, r.falta, r.justificada, r.substituicoes]
+            .forEach(v => criarCelulaRelatorio(tr, v));
+          tabela.appendChild(tr);
+        });
+        cont.appendChild(tabela);
+        resultado.appendChild(cont);
+        const detalhesTitulo = document.createElement('h4');
+        detalhesTitulo.textContent = 'Registros por culto';
+        resultado.appendChild(detalhesTitulo);
+        const lista = document.createElement('ul');
+        linhasDetalhes.sort((a, b) => a.data.localeCompare(b.data) || a.nome.localeCompare(b.nome, 'pt-BR'));
+        linhasDetalhes.forEach(d => {
+          const item = document.createElement('li');
+          item.textContent = `${formatarDataRelatorio(d.data)} — ${d.nome} (${d.grupo}): ${d.descricao}`;
+          lista.appendChild(item);
+        });
+        resultado.appendChild(lista);
+        mensagem.textContent = `Relatório gerado: ${registros.length} integrante(s) ou substituto(s).`;
+        imprimir.hidden = false;
+      } catch (erro) {
+        console.error('Erro ao gerar relatório mensal:', erro);
+        mensagem.textContent = 'Não foi possível gerar o relatório: ' + (erro.message || erro);
+      } finally {
+        botao.disabled = false;
+      }
+    }
+    el('mes-relatorio').value = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    el('btn-gerar-relatorio').addEventListener('click', gerarRelatorioMensal);
+    el('btn-imprimir-relatorio').addEventListener('click', () => window.print());
 
     el('btn-consultar-historico').addEventListener('click', consultarHistorico);
     mostrarSessao();
