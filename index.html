@@ -87,6 +87,30 @@
   </select>
   <div id="lista-presenca"></div>
   <p id="mensagem-presenca" class="status" role="status"></p>
+        <hr style="margin:25px 0">
+
+<h3>Histórico de Presenças</h3>
+<p>Consulte as presenças, faltas e substituições registradas.</p>
+
+<div id="historico-presencas">
+  <label for="culto-historico">Selecione o culto</label>
+
+  <select id="culto-historico">
+    <option value="">Selecione um culto</option>
+  </select>
+
+  <button type="button" id="btn-consultar-historico">
+    Consultar histórico
+  </button>
+
+  <div id="resultado-historico"></div>
+  <p id="mensagem-historico" class="status"></p>
+</div>
+
+<h3>Relatórios Mensais</h3>
+<p>Acompanhe a frequência dos integrantes da Banda e do Vocal.</p>
+
+<div id="relatorios-mensais"></div>
 </section>
     </div>
   </main>
@@ -358,12 +382,17 @@ const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate
     }
     async function carregarCultosPresenca() {
   const seletor = document.getElementById('culto-presenca');
+      const seletorHistorico = document.getElementById('culto-historico');
   const mensagem = document.getElementById('mensagem-presenca');
 
   if (!seletor) return;
 
   seletor.replaceChildren(new Option('Selecione um culto', ''));
-
+if (seletorHistorico) {
+  seletorHistorico.replaceChildren(
+    new Option('Selecione um culto', '')
+  );
+}
   const { data, error } = await supabaseClient
     .from('cultos')
     .select('id, data_culto, horario, descricao')
@@ -388,6 +417,12 @@ const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate
       `${dataFormatada} - ${horario} - ${culto.descricao || 'Culto'}`,
       culto.id
     ));
+    if (seletorHistorico) {
+  seletorHistorico.add(new Option(
+    `${dataFormatada} - ${horario} - ${culto.descricao || 'Culto'}`,
+    culto.id
+  ));
+}
   });
 }
 
@@ -649,7 +684,96 @@ const registros = Array.from(seletores).map(seletor => ({
   }
 }
 
+async function consultarHistorico() {
+  const cultoId = document.getElementById('culto-historico').value;
+  const resultado = document.getElementById('resultado-historico');
+  const mensagem = document.getElementById('mensagem-historico');
 
+  resultado.replaceChildren();
+  mensagem.textContent = '';
+
+  if (!cultoId) {
+    mensagem.textContent = 'Selecione um culto para consultar.';
+    return;
+  }
+
+  mensagem.textContent = 'Consultando histórico...';
+  try {
+  const { data: presencas, error } = await supabaseClient
+    .from('presencas')
+    .select(`
+      escala_id,
+      situacao,
+      chamadas!inner(culto_id),
+      escalas(instrumento, musicos(nome))
+    `)
+    .eq('chamadas.culto_id', cultoId);
+
+  if (error) throw error;
+
+  console.log('Histórico encontrado:', presencas);
+    if (!presencas || presencas.length === 0) {
+  resultado.textContent = 'Nenhuma presença registrada neste culto.';
+} else {
+  const lista = document.createElement('ul');
+
+  presencas.forEach(p => {
+    const item = document.createElement('li');
+    const nome = p.escalas?.musicos?.nome || 'Nome não informado';
+    const instrumento = p.escalas?.instrumento || '';
+    const situacao = p.situacao === 'presente'
+      ? 'Presente'
+      : p.situacao === 'justificada'
+        ? 'Falta justificada'
+        : 'Falta';
+
+    item.textContent = `${nome} - ${instrumento} - ${situacao}`;
+    lista.appendChild(item);
+  });
+
+  resultado.appendChild(lista);
+}
+  const { data: substituicoes, error: erroSubstituicoes } =
+  await supabaseClient
+    .from('participacoes_extras')
+    .select(`
+      nome_avulso,
+      instrumento,
+      escala_substituida_id,
+      chamadas!inner(culto_id),
+      escalas:escala_substituida_id(musicos(nome))
+    `)
+    .eq('chamadas.culto_id', cultoId)
+    .eq('tipo', 'substituicao');
+
+if (erroSubstituicoes) throw erroSubstituicoes;
+
+if (substituicoes && substituicoes.length > 0) {
+  const titulo = document.createElement('h4');
+  titulo.textContent = 'Substituições';
+  resultado.appendChild(titulo);
+
+  const listaSubstituicoes = document.createElement('ul');
+
+  substituicoes.forEach(s => {
+    const item = document.createElement('li');
+    const substituto = s.nome_avulso || 'Não informado';
+    const substituido = s.escalas?.musicos?.nome || 'Não informado';
+
+    item.textContent =
+      `${substituto} substituiu ${substituido} - ${s.instrumento || 'Instrumento não informado'}`;
+
+    listaSubstituicoes.appendChild(item);
+  });
+
+  resultado.appendChild(listaSubstituicoes);
+}
+    mensagem.textContent = 'Consulta realizada com sucesso.';
+} catch (erro) {
+  console.error('Erro ao consultar histórico:', erro);
+  mensagem.textContent = 'Erro ao consultar: ' + erro.message;
+}
+}
 
     
     async function editarEscala(escala) {
