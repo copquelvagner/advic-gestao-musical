@@ -500,7 +500,7 @@ async function salvarPresencas() {
   const cultoId = document.getElementById('culto-presenca').value;
   const mensagem = document.getElementById('mensagem-presenca');
   const seletores = document.querySelectorAll(
-    '#lista-presenca select[data-escala-id]:not(:disabled)'
+    '#lista-presenca select[data-departamento-id]:not(:disabled)'
   );
 
   if (!cultoId || !seletores.length) {
