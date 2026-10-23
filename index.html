@@ -1086,7 +1086,7 @@ item.appendChild(botaoExcluir);
     function atualizarPermissoesCadastro() {
       const admin = perfilAtual?.ativo === true && perfilAtual.papel === 'administrador';
       const lider = perfilAtual?.ativo === true && perfilAtual.papel === 'lider';
-      el('btn-cadastrar-banda').hidden = !(admin || lider);
+      el('btn-cadastrar-banda').hidden = !admin && !(lider && departamentosLiderados.some(id => musicosBanda.some(m => String(m.departamento_id) === String(id))));
       el('btn-cadastrar-vocal').hidden = !(admin || lider);
     }
 
@@ -1157,6 +1157,7 @@ item.appendChild(botaoExcluir);
         console.error('Erro ao preparar cadastro da Banda:', erro);
       } finally {
         carregandoOpcoesBanda = false;
+        atualizarPermissoesCadastro();
       }
     }
 
