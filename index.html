@@ -99,7 +99,7 @@
     <option value="">Selecione um culto</option>
   </select>
 
-  <button type="button" id="btn-consultar-historico" onclick="consultarHistorico()">
+  <button type="button" id="btn-consultar-historico">
     Consultar histórico
   </button>
 
@@ -1190,6 +1190,7 @@ item.appendChild(botaoExcluir);
       }
     });
 
+    el('btn-consultar-historico').addEventListener('click', consultarHistorico);
     mostrarSessao();
   </script>
 </body>
