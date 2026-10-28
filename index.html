@@ -1047,7 +1047,8 @@ item.appendChild(botaoExcluir);
           lista.appendChild(titulo);
           ultimoCulto = chave;
         }
-        const item = document.createElement('p');
+        const item = document.createElement('div');
+        item.style.marginBottom = '15px';
         item.textContent = escala.musicos?.nome || 'Cantor(a) não identificado(a)';
         if (podeGerenciarDepartamento(escala.departamento_id)) {
           const excluir = document.createElement('button');
