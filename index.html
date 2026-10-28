@@ -652,7 +652,10 @@ const registros = Array.from(seletores).map(seletor => ({
 
       const { error: erroPresencas } = await supabaseClient
         .from('presencas')
-        .upsert(presencas, { onConflict: 'escala_id' });
+       .upsert(presencas, {
+  onConflict: 'escala_id',
+  ignoreDuplicates: true
+});
 
       if (erroPresencas) throw erroPresencas;
 
