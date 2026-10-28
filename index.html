@@ -1125,7 +1125,11 @@ item.appendChild(botaoExcluir);
         mensagem.textContent = 'Cantor(a) cadastrado(a) na escala!';
         await carregarEscalaVocal();
       } catch (erro) {
-        mensagem.textContent = `Não foi possível salvar: ${erro.message || erro}`;
+        
+mensagem.textContent = erro?.code === '23505'
+  ? 'Esta pessoa já está escalada para este culto.'
+  : `Não foi possível salvar: ${erro.message || erro}`;
+
       } finally {
         botao.disabled = false;
       }
