@@ -1281,7 +1281,7 @@ mensagem.textContent = erro?.code === '23505'
     function criarCelulaRelatorio(linha, texto, cabecalho = false) {
       const celula = document.createElement(cabecalho ? 'th' : 'td');
       celula.textContent = String(texto);
-      celula.style.padding = '8px 12px';
+      celula.style.padding = '14px 12px';
       celula.style.borderBottom = '1px solid #dce3eb';
       celula.style.textAlign = 'center';
       linha.appendChild(celula);
@@ -1413,7 +1413,7 @@ mensagem.textContent = erro?.code === '23505'
         tabela.style.tableLayout = 'auto';
         tabela.style.margin = '15px auto';
         tabela.style.borderCollapse = 'collapse';
-        tabela.style.fontSize = '13px';
+        tabela.style.fontSize = '18px';
         const cabecalho = document.createElement('tr');
         ['Integrante', 'Grupo', 'Presenças', 'Faltas', 'Justificadas', 'Substituições'].forEach(t => criarCelulaRelatorio(cabecalho, t, true));
         tabela.appendChild(cabecalho);
