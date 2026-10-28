@@ -650,14 +650,34 @@ const registros = Array.from(seletores).map(seletor => ({
           situacao: r.situacao
         }));
 
-      const { error: erroPresencas } = await supabaseClient
-        .from('presencas')
-       .upsert(presencas, {
-  onConflict: 'escala_id',
-  ignoreDuplicates: true
-});
+      
+for (const presenca of presencas) {
+  const { data: existente, error: erroConsulta } = await supabaseClient
+    .from('presencas')
+    .select('id')
+    .eq('escala_id', presenca.escala_id)
+    .maybeSingle();
 
-      if (erroPresencas) throw erroPresencas;
+  if (erroConsulta) throw erroConsulta;
+
+  if (existente) {
+    const { error } = await supabaseClient
+      .from('presencas')
+      .update({
+        situacao: presenca.situacao
+      })
+      .eq('id', existente.id);
+
+    if (error) throw error;
+  } else {
+    const { error } = await supabaseClient
+      .from('presencas')
+      .insert(presenca);
+
+    if (error) throw error;
+  }
+}
+
 
       
 
