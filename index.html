@@ -26,6 +26,24 @@
     .status { min-height: 1.5em; overflow-wrap: anywhere; }
     footer { text-align: center; padding: 25px; color: #607086; }
     [hidden] { display: none !important; }
+    
+#painel-gestao .cartao {
+  margin-bottom: 20px;
+}
+
+#painel-gestao .cartao[hidden] {
+  display: none !important;
+}
+
+#menu-principal a {
+  padding: 10px 16px;
+  background: #ffffff;
+  border-radius: 8px;
+  color: #142b4d;
+  text-decoration: none;
+  font-weight: bold;
+}
+
   </style>
 </head>
 <body>
@@ -38,20 +56,20 @@
     <h2>Painel de Gestão Musical</h2>
     <p id="usuario-atual"></p>
     <button id="sair" type="button">Sair do sistema</button>
-    <nav style="display:flex;flex-wrap:wrap;gap:10px;margin:20px 0;">
+    <nav id="menu-principal" style="display:flex;flex-wrap:wrap;gap:10px;margin:20px 0;">
   <a href="#lista-cultos">📅 Calendário</a>
   <a href="#lista-escala-banda">🎹 Escalas</a>
   <a href="#controle-presenca">✅ Presenças</a>
   <a href="#relatorios-mensais">📊 Relatórios</a>
 </nav>
-    <div class="painel" style="margin-top:20px">
-      <section class="cartao">
+    <div class="painel" style="margin-top:20px;display:block">
+      <section class="cartao" id="tela-calendario">
         <h2>Calendário de Cultos</h2>
         <p>Consulte as datas e os horários dos cultos.</p>
         <div id="lista-cultos">Carregando calendário...</div>
       </section>
 
-      <section class="cartao">
+      <section class="cartao" id="tela-banda">
         <h2>Escala da Banda</h2>
         <p>Organize os músicos de cada culto.</p>
         <div id="lista-escala-banda">Carregando escala...</div>
@@ -69,7 +87,7 @@
         </div>
       </section>
 
-      <section class="cartao">
+      <section class="cartao" id="tela-vocal">
         <h2>Escala do Vocal</h2>
         <p>Organize os cantores de cada culto.</p>
         <div id="lista-escala-vocal">Carregando escala vocal...</div>
@@ -84,7 +102,7 @@
           <p id="mensagem-escala-vocal" class="status" role="status"></p>
         </div>
       </section>
-      <section class="cartao" id="controle-presenca">
+      <section class="cartao" id="controle-presenca" data-tela="presencas">
   <h2>Controle de Presença</h2>
   <p>Registre a participação dos músicos e cantores em cada culto.</p>
   <label for="culto-presenca">Selecione o culto</label>
@@ -112,11 +130,12 @@
   <div id="resultado-historico"></div>
   <p id="mensagem-historico" class="status"></p>
 </div>
-
+</section>
+<section class="cartao" id="tela-relatorios">
 <h3>Relatórios Mensais</h3>
 <p>Acompanhe a frequência dos integrantes da Banda e do Vocal.</p>
 
-<div id="relatorios-mensais">
+<div id="relatorios-mensais" data-tela="relatorios">
   <label for="mes-relatorio">Mês do relatório</label>
   <input id="mes-relatorio" type="month">
   <label for="departamento-relatorio">Departamento</label>
@@ -1670,6 +1689,43 @@ function imprimirFrequenciaPorCulto() {
     el('btn-imprimir-frequencia').addEventListener('click',imprimirFrequenciaPorCulto);
 
     el('btn-consultar-historico').addEventListener('click', consultarHistorico);
+   
+function abrirTela(nome) {
+  const telas = {
+    calendario: ['tela-calendario'],
+    escalas: ['tela-banda', 'tela-vocal'],
+    presencas: ['controle-presenca'],
+    relatorios: ['tela-relatorios']
+  };
+
+  const ids = telas[nome] || telas.calendario;
+
+  ['tela-calendario', 'tela-banda', 'tela-vocal', 'controle-presenca', 'tela-relatorios']
+    .forEach(id => {
+      document.getElementById(id).hidden = !ids.includes(id);
+    });
+
+  
+}
+
+document.querySelectorAll('#menu-principal a').forEach(link => {
+  link.addEventListener('click', evento => {
+    evento.preventDefault();
+    const destino = link.getAttribute('href');
+
+    const telas = {
+      '#lista-cultos': 'calendario',
+      '#lista-escala-banda': 'escalas',
+      '#controle-presenca': 'presencas',
+      '#relatorios-mensais': 'relatorios'
+    };
+
+    abrirTela(telas[destino] || 'calendario');
+  });
+});
+
+abrirTela('calendario');
+
     mostrarSessao();
   </script>
 </body>
