@@ -958,7 +958,12 @@ data.forEach(escala => {
     lista.appendChild(titulo);
     ultimoCulto = chaveCulto;
   }
-        const item = document.createElement('p');
+        const item = document.createElement('div');
+  item.style.marginBottom = '12px';
+  item.style.padding = '12px';
+  item.style.backgroundColor = '#f4f7fb';
+  item.style.borderRadius = '8px';
+  item.style.border = '1px solid #dce5ef';
      item.textContent = `${escala.instrumento || 'Instrumento não informado'}: ${escala.musicos?.nome || 'Músico não identificado'}`;
   const podeEditarEscala = perfilAtual?.ativo === true && (
   perfilAtual.papel === 'administrador' ||
