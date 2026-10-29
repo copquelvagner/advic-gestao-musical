@@ -1318,6 +1318,78 @@ mensagem.textContent = erro?.code === '23505'
           return;
         }
         const idsCultos = cultos.map(c => c.id);
+        
+        // Relatório individual: consulta somente as presenças
+        // vinculadas ao usuário que está conectado.
+        if (perfilAtual?.papel === 'integrante') {
+          const { data: minhasPresencas, error: erroMinhasPresencas } =
+            await supabaseClient
+              .from('presencas')
+              .select(`
+                situacao,
+                escala_id,
+                escalas!inner(
+                  culto_id,
+                  instrumento,
+                  musicos!inner(nome, usuario_id)
+                )
+              `)
+              .in('escalas.culto_id', idsCultos)
+              .eq('escalas.musicos.usuario_id', usuarioAtual.id);
+
+          if (erroMinhasPresencas) throw erroMinhasPresencas;
+
+          const registrosIndividuais = minhasPresencas || [];
+          const tabela = document.createElement('table');
+          tabela.style.borderCollapse = 'collapse';
+          tabela.style.margin = '15px 0';
+
+          const cabecalho = document.createElement('tr');
+          ['Data', 'Culto', 'Instrumento', 'Situação'].forEach(texto =>
+            criarCelulaRelatorio(cabecalho, texto, true)
+          );
+          tabela.appendChild(cabecalho);
+
+          registrosIndividuais.forEach(p => {
+            const escala = p.escalas;
+            const culto = cultos.find(
+              c => String(c.id) === String(escala.culto_id)
+            );
+
+            if (!culto) return;
+
+            const situacao = {
+              presente: 'Presente',
+              falta: 'Falta',
+              justificada: 'Falta justificada'
+            }[p.situacao] || p.situacao;
+
+            const linha = document.createElement('tr');
+            [
+              formatarDataRelatorio(culto.data_culto),
+              culto.descricao || 'Culto',
+              escala.instrumento || 'Não informado',
+              situacao
+            ].forEach(texto => criarCelulaRelatorio(linha, texto));
+
+            tabela.appendChild(linha);
+          });
+
+          if (!registrosIndividuais.length) {
+            mensagem.textContent =
+              'Nenhuma presença individual encontrada para este mês.';
+            return;
+          }
+
+          const titulo = document.createElement('h4');
+          titulo.textContent = `Meu histórico — ${mes}`;
+          resultado.appendChild(titulo);
+          resultado.appendChild(tabela);
+          mensagem.textContent =
+            `${registrosIndividuais.length} registro(s) encontrado(s).`;
+          return;
+        }
+
         const chamadasResp = await supabaseClient.from('chamadas')
           .select('id, culto_id, departamento_id').in('culto_id', idsCultos);
         if (chamadasResp.error) throw chamadasResp.error;
