@@ -1150,7 +1150,7 @@ mensagem.textContent = erro?.code === '23505'
       const admin = perfilAtual?.ativo === true && perfilAtual.papel === 'administrador';
       const lider = perfilAtual?.ativo === true && perfilAtual.papel === 'lider';
       el('btn-cadastrar-banda').hidden = !(admin || (lider && departamentosLiderados.some(id => String(id) === '8288207d-2520-4ac2-a169-bb7714144617')));
-      el('btn-cadastrar-vocal').hidden = !(admin || lider);
+      el('btn-cadastrar-vocal').hidden = !admin && !(lider && departamentosLiderados.some(id => musicosVocal.some(m => String(m.departamento_id) === String(id))));
     }
 
     // Preenche os campos com os cultos e músicos cadastrados no Supabase.
