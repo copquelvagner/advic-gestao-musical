@@ -1149,7 +1149,7 @@ mensagem.textContent = erro?.code === '23505'
     function atualizarPermissoesCadastro() {
       const admin = perfilAtual?.ativo === true && perfilAtual.papel === 'administrador';
       const lider = perfilAtual?.ativo === true && perfilAtual.papel === 'lider';
-      el('btn-cadastrar-banda').hidden = !admin && !(lider && departamentosLiderados.some(id => musicosBanda.some(m => String(m.departamento_id) === String(id))));
+      el('btn-cadastrar-banda').hidden = !(admin || (lider && departamentosLiderados.some(id => String(id) === '8288207d-2520-4ac2-a169-bb7714144617')));
       el('btn-cadastrar-vocal').hidden = !(admin || lider);
     }
 
