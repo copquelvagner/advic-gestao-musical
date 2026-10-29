@@ -1321,7 +1321,7 @@ mensagem.textContent = erro?.code === '23505'
         
         // Relatório individual: consulta somente as presenças
         // vinculadas ao usuário que está conectado.
-        if (perfilAtual?.papel === 'integrante') {
+        if (!['administrador', 'lider'].includes(perfilAtual?.papel)) {
           const { data: minhasPresencas, error: erroMinhasPresencas } =
             await supabaseClient
               .from('presencas')
