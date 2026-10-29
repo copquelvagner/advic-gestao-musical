@@ -1340,6 +1340,15 @@ mensagem.textContent = erro?.code === '23505'
           if (erroMinhasPresencas) throw erroMinhasPresencas;
 
           const registrosIndividuais = minhasPresencas || [];
+          const { data: minhasSubstituicoes, error: erroSubstituicoes } =
+  await supabaseClient
+    .from('participacoes_extras')
+    .select('nome_avulso, instrumento, chamada_id, chamadas!inner(culto_id)')
+    .eq('tipo', 'substituicao')
+    .in('chamadas.culto_id', idsCultos)
+    .ilike('nome_avulso', 'Caio');
+
+if (erroSubstituicoes) throw erroSubstituicoes;
           const tabela = document.createElement('table');
           tabela.style.borderCollapse = 'collapse';
           tabela.style.margin = '15px 0';
@@ -1374,8 +1383,26 @@ mensagem.textContent = erro?.code === '23505'
 
             tabela.appendChild(linha);
           });
+          (minhasSubstituicoes || []).forEach(s => {
+  const culto = cultos.find(c =>
+    String(c.id) === String(s.chamadas?.culto_id)
+  );
 
-          if (!registrosIndividuais.length) {
+  if (!culto) return;
+
+  const linha = document.createElement('tr');
+
+  [
+    formatarDataRelatorio(culto.data_culto),
+    culto.descricao || 'Culto',
+    s.instrumento || 'Não informado',
+    'Substituição'
+  ].forEach(texto => criarCelulaRelatorio(linha, texto));
+
+  tabela.appendChild(linha);
+});
+
+          if (!registrosIndividuais.length && !(minhasSubstituicoes || []).length) {
             mensagem.textContent =
               'Nenhuma presença individual encontrada para este mês.';
             return;
@@ -1386,7 +1413,7 @@ mensagem.textContent = erro?.code === '23505'
           resultado.appendChild(titulo);
           resultado.appendChild(tabela);
           mensagem.textContent =
-            `${registrosIndividuais.length} registro(s) encontrado(s).`;
+            `${registrosIndividuais.length + (minhasSubstituicoes || []).length} registro(s) encontrado(s).`;
           return;
         }
 
