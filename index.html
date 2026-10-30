@@ -1340,30 +1340,31 @@ mensagem.textContent = erro?.code === '23505'
           if (erroMinhasPresencas) throw erroMinhasPresencas;
 
           const registrosIndividuais = minhasPresencas || [];
-          const { data: musicoAtual, error: erroMusicoAtual } =
-  await supabaseClient
-    .from('musicos')
-    .select('id')
-    .eq('usuario_id', usuarioAtual.id)
-    .maybeSingle();
 
-if (erroMusicoAtual) throw erroMusicoAtual;
+          // Identifica o integrante pela conta autenticada, sem IDs fixos.
+          const { data: musicoAtual, error: erroMusicoAtual } = await supabaseClient
+            .from('musicos')
+            .select('id')
+            .eq('usuario_id', usuarioAtual.id)
+            .maybeSingle();
+          if (erroMusicoAtual) throw erroMusicoAtual;
 
-if (!musicoAtual) {
-  throw new Error('Não foi encontrado um músico vinculado a esta conta.');
-}
-          const { data: minhasSubstituicoes, error: erroSubstituicoes } =
-  await supabaseClient
-    .from('participacoes_extras')
-    .select('nome_avulso, instrumento, chamada_id, chamadas(culto_id, cultos(data_culto, descricao))')
-            .eq('tipo', 'substituicao')
-    
-   .eq('musico_id', musicoAtual.id);
-const substituicoesDoMes = (minhasSubstituicoes || []).filter(s => {
-  const data = s.chamadas?.cultos?.data_culto;
-  return data && cultos.some(c => String(c.id) === String(s.chamadas?.culto_id));
-});
-if (erroSubstituicoes) throw erroSubstituicoes;
+          let substituicoesDoMes = [];
+          if (musicoAtual) {
+            // A escala substituída identifica o culto sem depender da permissão
+            // de leitura de 'chamadas', que pode ser restrita aos líderes.
+            const { data: minhasSubstituicoes, error: erroSubstituicoes } = await supabaseClient
+              .from('participacoes_extras')
+              .select('id, instrumento, escala_substituida_id, escalas:escala_substituida_id(culto_id)')
+              .eq('tipo', 'substituicao')
+              .eq('musico_id', musicoAtual.id);
+            if (erroSubstituicoes) throw erroSubstituicoes;
+
+            const cultosDoMes = new Set(idsCultos.map(String));
+            substituicoesDoMes = (minhasSubstituicoes || []).filter(s =>
+              s.escalas?.culto_id && cultosDoMes.has(String(s.escalas.culto_id))
+            );
+          }
           const tabela = document.createElement('table');
           tabela.style.borderCollapse = 'collapse';
           tabela.style.margin = '15px 0';
@@ -1400,7 +1401,7 @@ if (erroSubstituicoes) throw erroSubstituicoes;
           });
           substituicoesDoMes.forEach(s => {
   const culto = cultos.find(c =>
-    String(c.id) === String(s.chamadas?.culto_id)
+    String(c.id) === String(s.escalas?.culto_id)
   );
 
   if (!culto) return;
@@ -1417,7 +1418,7 @@ if (erroSubstituicoes) throw erroSubstituicoes;
   tabela.appendChild(linha);
 });
 
-          if (!registrosIndividuais.length && !(minhasSubstituicoes || []).length) {
+          if (!registrosIndividuais.length && !substituicoesDoMes.length) {
             mensagem.textContent =
               'Nenhuma presença individual encontrada para este mês.';
             return;
@@ -1428,7 +1429,7 @@ if (erroSubstituicoes) throw erroSubstituicoes;
           resultado.appendChild(titulo);
           resultado.appendChild(tabela);
           mensagem.textContent =
-            `${registrosIndividuais.length + (minhasSubstituicoes || []).length} registro(s) encontrado(s).`;
+            `${registrosIndividuais.length + substituicoesDoMes.length} registro(s) encontrado(s).`;
           return;
         }
 
