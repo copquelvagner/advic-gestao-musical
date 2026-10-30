@@ -1179,6 +1179,8 @@ mensagem.textContent = erro?.code === '23505'
       const lider = perfilAtual?.ativo === true && perfilAtual.papel === 'lider';
       el('btn-cadastrar-banda').hidden = !(admin || (lider && departamentosLiderados.some(id => String(id) === '8288207d-2520-4ac2-a169-bb7714144617')));
       el('gerador-banda').hidden = el('btn-cadastrar-banda').hidden;
+      el('escala-oficial-novembro').hidden = !admin;
+      el('programacao-ceia').hidden = !admin;
       el('btn-cadastrar-vocal').hidden = !(admin || (lider && departamentosLiderados.length > 0));
     }
 
