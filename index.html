@@ -84,6 +84,23 @@
         <h2>Calendário de Cultos</h2>
         <p>Consulte as datas e os horários dos cultos.</p>
         <div id="lista-cultos">Carregando calendário...</div>
+        <div id="gestao-festividades" hidden style="margin-top:20px;padding:16px;border:1px solid #dce5ef;border-radius:10px;background:#f7faff">
+          <h3>Festividades dos departamentos</h3>
+          <p>Cadastre cada dia da festividade separadamente. Sexta e sábado podem ter horários diferentes. As escalas da Banda e do Vocal são feitas depois, na área Escalas.</p>
+          <label for="festa-nome">Nome da festividade / departamento</label>
+          <input id="festa-nome" maxlength="100" placeholder="Ex.: Congresso de Jovens" />
+          <label for="festa-sexta">Sexta-feira (data)</label>
+          <input id="festa-sexta" type="date" min="2027-01-01" />
+          <label for="festa-hora-sexta">Horário de sexta-feira</label>
+          <input id="festa-hora-sexta" type="time" value="19:30" />
+          <label for="festa-sabado">Sábado (data)</label>
+          <input id="festa-sabado" type="date" min="2027-01-01" />
+          <label for="festa-hora-sabado">Horário de sábado</label>
+          <input id="festa-hora-sabado" type="time" value="19:00" />
+          <button type="button" id="btn-salvar-festividade">Cadastrar festividade</button>
+          <p id="mensagem-festividade" class="status" role="status"></p>
+          <div id="lista-festividades"></div>
+        </div>
       </section>
 
       <section class="cartao" id="tela-banda">
@@ -250,6 +267,22 @@
 let usuarioAtual = null;
 let perfilAtual = null;
     let departamentosLiderados = [];
+    const DEPARTAMENTO_BANDA_ID = '8288207d-2520-4ac2-a169-bb7714144617';
+    let departamentosVocal = [];
+    function liderMusicalAutorizado() {
+      return perfilAtual?.ativo === true && perfilAtual?.papel === 'lider' &&
+        departamentosLiderados.some(id => String(id) === DEPARTAMENTO_BANDA_ID || departamentosVocal.some(v => String(v) === String(id)));
+    }
+    function podeCadastrarFestividades() { return adminAtivo() || liderMusicalAutorizado(); }
+    async function identificarDepartamentosVocal() {
+      departamentosVocal = [];
+      const {data, error} = await supabaseClient.from('musicos').select('departamento_id,instrumento_principal,departamento');
+      if (error) { console.warn('Não foi possível identificar o departamento Vocal:', error); return; }
+      departamentosVocal = [...new Set((data || []).filter(m =>
+        /voz|vocal|cantor/i.test(String(m.instrumento_principal || '')) ||
+        /vocal/i.test(String(m.departamento || ''))
+      ).map(m => m.departamento_id).filter(Boolean).map(String))];
+    }
     async function carregarPerfil() {
   perfilAtual = null;
   departamentosLiderados = [];
@@ -311,6 +344,12 @@ let perfilAtual = null;
         el('usuario-atual').textContent = `Conectado como: ${data.session.user.email || 'usuário'}`;
         mostrar('painel-gestao');
         await carregarPerfil();
+        await identificarDepartamentosVocal();
+        if (perfilAtual?.papel === 'lider' && !liderMusicalAutorizado()) {
+          mostrar('area-login');
+          el('mensagem-login').textContent = 'Este aplicativo é destinado à equipe musical autorizada.';
+          return;
+        }
         await carregarCultos();
         await carregarCultosPresenca();
         await carregarEscalaBanda();
@@ -337,6 +376,13 @@ let perfilAtual = null;
           mostrar('painel-gestao');
 setTimeout(async () => {
   await carregarPerfil();
+  await identificarDepartamentosVocal();
+  if (perfilAtual?.papel === 'lider' && !liderMusicalAutorizado()) {
+    mostrar('area-login');
+    el('mensagem-login').textContent = 'Este aplicativo é destinado à equipe musical autorizada.';
+    return;
+  }
+  await carregarCultos();
   atualizarPermissoesCadastro();
   await carregarCultosPresenca();
   await carregarEscalaBanda();
@@ -428,6 +474,79 @@ setTimeout(async () => {
       const { error } = await supabaseClient.auth.signOut();
       if (error) { alert(descreverErro(error)); return; }
       mostrar('area-login');
+    });
+
+    const PREFIXO_FESTA = 'Festividade — ';
+    async function carregarFestividades() {
+      if (!podeCadastrarFestividades()) return;
+      const alvo = el('lista-festividades');
+      alvo.replaceChildren();
+      const {data, error} = await supabaseClient.from('cultos')
+        .select('id,data_culto,horario,descricao')
+        .gte('data_culto','2027-01-01').order('data_culto',{ascending:true});
+      if (error) { alvo.textContent = 'Não foi possível consultar as festividades.'; return; }
+      const festas = (data || []).filter(c => String(c.descricao || '').startsWith(PREFIXO_FESTA));
+      if (!festas.length) { alvo.textContent = 'Nenhuma festividade cadastrada a partir de janeiro de 2027.'; return; }
+      const titulo = document.createElement('h4'); titulo.textContent = 'Festividades cadastradas'; alvo.appendChild(titulo);
+      festas.forEach(c => {
+        const linha = document.createElement('div');
+        linha.style.cssText='padding:8px;border-bottom:1px solid #dce5ef';
+        const texto = document.createElement('span');
+        texto.textContent = `${c.data_culto.split('-').reverse().join('/')} às ${String(c.horario || '').slice(0,5)} — ${c.descricao.slice(PREFIXO_FESTA.length)} `;
+        linha.appendChild(texto);
+        const editar = document.createElement('button'); editar.type='button'; editar.textContent='Editar horário';
+        editar.style.margin='4px';
+        editar.onclick = async () => {
+          if (!podeCadastrarFestividades()) return;
+          const hora = prompt('Novo horário (HH:MM):',String(c.horario || '').slice(0,5));
+          if (hora === null) return;
+          if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) { alert('Informe um horário válido, como 19:30.'); return; }
+          const r = await supabaseClient.from('cultos').update({horario:hora+':00'}).eq('id',c.id).eq('descricao',c.descricao).select('id');
+          if (r.error || !r.data?.length) {alert('Não foi possível editar. Confira as permissões do Supabase. '+(r.error?.message || ''));return;}
+          await carregarCultos(); await carregarCultosPresenca(); await carregarFestividades();
+        };
+        linha.appendChild(editar);
+        const excluir = document.createElement('button'); excluir.type='button'; excluir.textContent='Excluir dia';
+        excluir.style.margin='4px';
+        excluir.onclick = async () => {
+          if (!podeCadastrarFestividades() || !confirm('Excluir este dia da festividade? Se houver escalas vinculadas, a exclusão deverá ser resolvida pelo administrador.')) return;
+          const r = await supabaseClient.from('cultos').delete().eq('id',c.id).eq('descricao',c.descricao).select('id');
+          if (r.error || !r.data?.length) {alert('Não foi possível excluir. Pode haver escalas vinculadas ou falta de permissão. '+(r.error?.message || ''));return;}
+          await carregarCultos(); await carregarCultosPresenca(); await carregarFestividades();
+        };
+        linha.appendChild(excluir); alvo.appendChild(linha);
+      });
+    }
+    el('btn-salvar-festividade').addEventListener('click', async () => {
+      const msg=el('mensagem-festividade'), btn=el('btn-salvar-festividade');
+      if (!podeCadastrarFestividades()) {msg.textContent='Acesso não autorizado.';return;}
+      const nome=el('festa-nome').value.trim();
+      const datas=[['festa-sexta','festa-hora-sexta',5],['festa-sabado','festa-hora-sabado',6]];
+      const dias=[];
+      if (!nome || nome.length > 100) {msg.textContent='Informe o nome da festividade (até 100 caracteres).';return;}
+      for (const [campoData,campoHora,diaSemana] of datas) {
+        const data=el(campoData).value, hora=el(campoHora).value;
+        if (!data) continue;
+        if (data < '2027-01-01' || !/^\d{4}-\d{2}-\d{2}$/.test(data)) {msg.textContent='As festividades devem começar em janeiro de 2027.';return;}
+        if (dataLocalDia(data) !== diaSemana) {msg.textContent=`Confira a data: ${campoData === 'festa-sexta' ? 'sexta-feira' : 'sábado'} não corresponde ao dia selecionado.`;return;}
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) {msg.textContent='Informe um horário válido para cada dia.';return;}
+        dias.push({data_culto:data,horario:hora+':00',periodo:Number(hora.slice(0,2)) < 12?'Manhã':Number(hora.slice(0,2)) < 18?'Tarde':'Noite',descricao:PREFIXO_FESTA+nome});
+      }
+      if (!dias.length) {msg.textContent='Escolha pelo menos uma data (sexta-feira ou sábado).';return;}
+      if (dias.length===2 && new Date(dias[0].data_culto+'T12:00:00').getTime()+86400000 !== new Date(dias[1].data_culto+'T12:00:00').getTime()) {msg.textContent='A sexta-feira e o sábado devem ser consecutivos.';return;}
+      btn.disabled=true; msg.textContent='Conferindo as datas...';
+      try {
+        const res=await supabaseClient.from('cultos').select('id,data_culto,descricao,horario').in('data_culto',dias.map(d=>d.data_culto));
+        if (res.error) throw res.error;
+        const repetidos=dias.filter(d=>(res.data||[]).some(c=>c.data_culto===d.data_culto && c.descricao===d.descricao));
+        if (repetidos.length) {msg.textContent='Essa festividade já está cadastrada em uma das datas. Nenhum dia foi duplicado.';return;}
+        const r=await supabaseClient.from('cultos').insert(dias).select('id');
+        if (r.error) throw r.error;
+        if (r.data?.length !== dias.length) throw new Error('O banco não confirmou todos os dias. Confira o calendário antes de tentar novamente.');
+        msg.textContent=`Festividade cadastrada: ${dias.length} dia(s). Agora monte as escalas da Banda e do Vocal na aba Escalas.`;
+        await carregarCultos(); await carregarCultosPresenca(); await carregarFestividades();
+      } catch(e) {msg.textContent='Não foi possível cadastrar: '+(e.message || e)+'. Confira as permissões do Supabase.';}
+      finally {btn.disabled=false;}
     });
 
     async function carregarCultos() {
