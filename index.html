@@ -1350,20 +1350,50 @@ mensagem.textContent = erro?.code === '23505'
           if (erroMusicoAtual) throw erroMusicoAtual;
 
           let substituicoesDoMes = [];
+          let substituicoesSemData = [];
           if (musicoAtual) {
-            // A escala substituída identifica o culto sem depender da permissão
-            // de leitura de 'chamadas', que pode ser restrita aos líderes.
+            // Busca somente as participações do integrante autenticado.
+            // Evita depender de junções que podem ser ocultadas pelas regras RLS.
             const { data: minhasSubstituicoes, error: erroSubstituicoes } = await supabaseClient
               .from('participacoes_extras')
-              .select('id, instrumento, escala_substituida_id, escalas:escala_substituida_id(culto_id)')
+              .select('id, instrumento, escala_substituida_id, chamada_id')
               .eq('tipo', 'substituicao')
               .eq('musico_id', musicoAtual.id);
             if (erroSubstituicoes) throw erroSubstituicoes;
 
-            const cultosDoMes = new Set(idsCultos.map(String));
-            substituicoesDoMes = (minhasSubstituicoes || []).filter(s =>
-              s.escalas?.culto_id && cultosDoMes.has(String(s.escalas.culto_id))
-            );
+            const extras = minhasSubstituicoes || [];
+            const idsChamadasExtras = [...new Set(extras.map(s => s.chamada_id).filter(Boolean))];
+            const idsEscalasExtras = [...new Set(extras.map(s => s.escala_substituida_id).filter(Boolean))];
+            let chamadasExtras = [];
+            let escalasExtras = [];
+
+            if (idsChamadasExtras.length) {
+              const resposta = await supabaseClient.from('chamadas')
+                .select('id, culto_id').in('id', idsChamadasExtras);
+              if (resposta.error) console.warn('Consulta de chamadas restrita:', resposta.error);
+              else chamadasExtras = resposta.data || [];
+            }
+            if (idsEscalasExtras.length) {
+              const resposta = await supabaseClient.from('escalas')
+                .select('id, culto_id').in('id', idsEscalasExtras);
+              if (resposta.error) console.warn('Consulta de escalas restrita:', resposta.error);
+              else escalasExtras = resposta.data || [];
+            }
+
+            const chamadasPorId = new Map(chamadasExtras.map(c => [String(c.id), c.culto_id]));
+            const escalasPorId = new Map(escalasExtras.map(e => [String(e.id), e.culto_id]));
+            const cultosPorId = new Map(cultos.map(c => [String(c.id), c]));
+            extras.forEach(s => {
+              // A chamada registra o culto efetivo da substituição.
+              const cultoId = chamadasPorId.get(String(s.chamada_id))
+                || escalasPorId.get(String(s.escala_substituida_id));
+              if (!cultoId) {
+                substituicoesSemData.push(s);
+                return;
+              }
+              const culto = cultosPorId.get(String(cultoId));
+              if (culto) substituicoesDoMes.push({ ...s, culto });
+            });
           }
           const tabela = document.createElement('table');
           tabela.style.borderCollapse = 'collapse';
@@ -1400,27 +1430,21 @@ mensagem.textContent = erro?.code === '23505'
             tabela.appendChild(linha);
           });
           substituicoesDoMes.forEach(s => {
-  const culto = cultos.find(c =>
-    String(c.id) === String(s.escalas?.culto_id)
-  );
-
-  if (!culto) return;
-
-  const linha = document.createElement('tr');
-
-  [
-    formatarDataRelatorio(culto.data_culto),
-    culto.descricao || 'Culto',
-    s.instrumento || 'Não informado',
-    'Substituição'
-  ].forEach(texto => criarCelulaRelatorio(linha, texto));
-
-  tabela.appendChild(linha);
-});
+            const culto = s.culto;
+            const linha = document.createElement('tr');
+            [
+              formatarDataRelatorio(culto.data_culto),
+              culto.descricao || 'Culto',
+              s.instrumento || 'Não informado',
+              'Substituição'
+            ].forEach(texto => criarCelulaRelatorio(linha, texto));
+            tabela.appendChild(linha);
+          });
 
           if (!registrosIndividuais.length && !substituicoesDoMes.length) {
-            mensagem.textContent =
-              'Nenhuma presença individual encontrada para este mês.';
+            mensagem.textContent = substituicoesSemData.length
+              ? 'Existe substituição vinculada à sua conta, mas o sistema não consegue consultar a data do culto. Verifique as permissões de leitura de chamadas e escalas no Supabase.'
+              : 'Nenhuma presença individual encontrada para este mês.';
             return;
           }
 
@@ -1429,7 +1453,8 @@ mensagem.textContent = erro?.code === '23505'
           resultado.appendChild(titulo);
           resultado.appendChild(tabela);
           mensagem.textContent =
-            `${registrosIndividuais.length + substituicoesDoMes.length} registro(s) encontrado(s).`;
+            `${registrosIndividuais.length + substituicoesDoMes.length} registro(s) encontrado(s).` +
+            (substituicoesSemData.length ? ' Há também substituição(ões) cuja data não está acessível. Verifique as permissões de chamadas e escalas no Supabase.' : '');
           return;
         }
 
