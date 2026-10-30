@@ -417,7 +417,7 @@ setTimeout(async () => {
       const lista = el('lista-cultos');
       if (!lista) return;
       lista.textContent = 'Carregando calendário...';
-      const hoje = new Date();
+      const hoje = new Date(Math.max(Date.now(), new Date(2026, 10, 1).getTime()));
 const ano = hoje.getFullYear();
 const mes = String(hoje.getMonth() + 1).padStart(2, '0');
 
