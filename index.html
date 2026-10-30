@@ -44,6 +44,23 @@
   font-weight: bold;
 }
 
+
+    .agenda-navegacao { display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap; }
+    .agenda-navegacao button { margin-top:0; }
+    .agenda-grade { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px; }
+    .agenda-dia-semana { text-align:center;font-weight:bold;padding:10px 2px;background:#152b4e;color:white;border-radius:6px; }
+    .agenda-celula { border:1px solid #d8e0ec;border-radius:8px;padding:8px;min-height:95px;min-width:0;background:#f7f9fc;overflow-wrap:anywhere; }
+    .agenda-evento { background:#dce9fa;color:#152b4e;padding:6px;margin-top:6px;border-radius:5px;font-size:12px;line-height:1.4; }
+    .agenda-musicos { margin-top:5px;font-size:11px; }
+    @media(max-width:700px) {
+      .agenda-grade { grid-template-columns:repeat(7,minmax(0,1fr));gap:2px; }
+      .agenda-dia-semana { font-size:10px;padding:8px 0; }
+      .agenda-celula { padding:3px;min-height:65px;font-size:11px; }
+      .agenda-evento { padding:3px;font-size:10px; }
+      .agenda-musicos { font-size:10px; }
+      .agenda-navegacao { justify-content:center; }
+      .agenda-navegacao strong { width:100%;text-align:center;order:-1; }
+    }
   </style>
 </head>
 <body>
@@ -416,97 +433,111 @@ setTimeout(async () => {
     async function carregarCultos() {
       const lista = el('lista-cultos');
       if (!lista) return;
-      lista.textContent = 'Carregando calendário...';
       const hoje = window.mesAgenda || new Date(Math.max(Date.now(), new Date(2026, 10, 1).getTime()));
-const ano = hoje.getFullYear();
-const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+      const ano = hoje.getFullYear();
+      const mesNumero = hoje.getMonth();
+      const mes = String(mesNumero + 1).padStart(2, '0');
+      const primeiroDia = `${ano}-${mes}-01`;
+      const ultimoDia = `${ano}-${mes}-${String(new Date(ano, mesNumero + 1, 0).getDate()).padStart(2, '0')}`;
+      const requisicao = (window.requisicaoAgenda || 0) + 1;
+      window.requisicaoAgenda = requisicao;
 
-const primeiroDia = `${ano}-${mes}-01`;
-const ultimoDia = `${ano}-${mes}-${new Date(ano, hoje.getMonth() + 1, 0).getDate()}`;
-      const { data, error } = await supabaseClient
-        .from('cultos')
-        .select('data_culto, periodo, horario, descricao')
+      lista.replaceChildren();
+      const navegacao = document.createElement('div');
+      navegacao.className = 'agenda-navegacao';
+      const anterior = document.createElement('button');
+      anterior.type = 'button';
+      anterior.textContent = '◀ Anterior';
+      anterior.onclick = () => {
+        window.mesAgenda = new Date(ano, mesNumero - 1, 1);
+        carregarCultos();
+      };
+      const tituloMes = document.createElement('strong');
+      tituloMes.textContent = hoje.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+      const proximo = document.createElement('button');
+      proximo.type = 'button';
+      proximo.textContent = 'Próximo ▶';
+      proximo.onclick = () => {
+        window.mesAgenda = new Date(ano, mesNumero + 1, 1);
+        carregarCultos();
+      };
+      navegacao.append(anterior, tituloMes, proximo);
+      lista.appendChild(navegacao);
+
+      const aviso = document.createElement('p');
+      aviso.textContent = 'Carregando cultos e músicos...';
+      lista.appendChild(aviso);
+
+      const { data, error } = await supabaseClient.from('cultos')
+        .select('id,data_culto,periodo,horario,descricao')
         .gte('data_culto', primeiroDia)
-.lte('data_culto', ultimoDia)
+        .lte('data_culto', ultimoDia)
         .order('data_culto', { ascending: true })
         .order('horario', { ascending: true });
+      if (requisicao !== window.requisicaoAgenda) return;
       if (error) {
-        lista.textContent = 'Não foi possível carregar os cultos.';
+        aviso.textContent = 'Não foi possível carregar os cultos.';
         console.error('Erro no calendário:', error);
         return;
       }
-      lista.replaceChildren();
-      const navegacao = document.createElement('div');
-navegacao.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:15px;';
-
-const anterior = document.createElement('button');
-anterior.textContent = '◀ Anterior';
-anterior.onclick = () => {
-  window.mesAgenda = new Date(ano, hoje.getMonth() - 1, 1);
-  carregarCultos();
-};
-
-const tituloMes = document.createElement('strong');
-tituloMes.textContent = hoje.toLocaleDateString('pt-BR', {
-  month: 'long',
-  year: 'numeric'
-}).toUpperCase();
-
-const proximo = document.createElement('button');
-proximo.textContent = 'Próximo ▶';
-proximo.onclick = () => {
-  window.mesAgenda = new Date(ano, hoje.getMonth() + 1, 1);
-  carregarCultos();
-};
-
-navegacao.append(anterior, tituloMes, proximo);
-lista.appendChild(navegacao);
-      if (!data || data.length === 0) {
-        lista.textContent = 'Nenhum culto encontrado.';
-        return;
+      const cultos = data || [];
+      const ids = cultos.map(c => c.id);
+      let escalas = [];
+      if (ids.length) {
+        const resposta = await supabaseClient.from('escalas')
+          .select('culto_id,instrumento,musicos(nome)').in('culto_id', ids);
+        if (requisicao !== window.requisicaoAgenda) return;
+        if (resposta.error) console.error('Erro ao carregar músicos do calendário:', resposta.error);
+        else escalas = resposta.data || [];
       }
-     const grade = document.createElement('div');
-grade.style.cssText = 'display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-top:15px;';
+      aviso.remove();
 
-const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
-diasSemana.forEach(dia => {
-  const titulo = document.createElement('div');
-  titulo.textContent = dia;
-  titulo.style.cssText = 'text-align:center;font-weight:bold;padding:10px 0;background:#152b4e;color:white;border-radius:6px;';
-  grade.appendChild(titulo);
-});
-
-const primeiroDiaSemana = new Date(ano, hoje.getMonth(), 1).getDay();
-const totalDias = new Date(ano, hoje.getMonth() + 1, 0).getDate();
-
-for (let i = 0; i < primeiroDiaSemana; i++) {
-  grade.appendChild(document.createElement('div'));
-}
-
-for (let dia = 1; dia <= totalDias; dia++) {
-  const celula = document.createElement('div');
-  celula.style.cssText = 'border:1px solid #d8e0ec;border-radius:8px;padding:8px;min-height:90px;min-width:0;background:#f7f9fc;overflow-wrap:anywhere;';
-
-  const numero = document.createElement('strong');
-  numero.textContent = dia;
-  celula.appendChild(numero);
-
-  const dataDia = `${ano}-${mes}-${String(dia).padStart(2, '0')}`;
-
-  data.filter(culto => culto.data_culto === dataDia).forEach(culto => {
-    const evento = document.createElement('div');
-    const horario = culto.horario ? culto.horario.slice(0, 5) : culto.periodo;
-
-    evento.textContent = `${horario} - ${culto.descricao}`;
-    evento.style.cssText = 'background:#dce9fa;color:#152b4e;padding:5px;margin-top:6px;border-radius:5px;font-size:12px;';
-    celula.appendChild(evento);
-  });
-
-  grade.appendChild(celula);
-}
-
-lista.appendChild(grade);
+      const grade = document.createElement('div');
+      grade.className = 'agenda-grade';
+      ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].forEach(dia => {
+        const titulo = document.createElement('div');
+        titulo.className = 'agenda-dia-semana';
+        titulo.textContent = dia;
+        grade.appendChild(titulo);
+      });
+      const primeiroDiaSemana = new Date(ano, mesNumero, 1).getDay();
+      const totalDias = new Date(ano, mesNumero + 1, 0).getDate();
+      for (let i = 0; i < primeiroDiaSemana; i++) {
+        const vazio = document.createElement('div');
+        vazio.className = 'agenda-vazio';
+        grade.appendChild(vazio);
+      }
+      for (let dia = 1; dia <= totalDias; dia++) {
+        const celula = document.createElement('div');
+        celula.className = 'agenda-celula';
+        const numero = document.createElement('strong');
+        numero.textContent = String(dia);
+        celula.appendChild(numero);
+        const dataDia = `${ano}-${mes}-${String(dia).padStart(2, '0')}`;
+        cultos.filter(c => c.data_culto === dataDia).forEach(culto => {
+          const evento = document.createElement('div');
+          evento.className = 'agenda-evento';
+          const cabecalho = document.createElement('strong');
+          const horario = culto.horario ? String(culto.horario).slice(0, 5) : (culto.periodo || '');
+          cabecalho.textContent = `${horario} — ${culto.descricao || 'Culto'}`;
+          evento.appendChild(cabecalho);
+          const integrantes = escalas.filter(e => String(e.culto_id) === String(culto.id));
+          if (integrantes.length) {
+            const nomes = document.createElement('div');
+            nomes.className = 'agenda-musicos';
+            nomes.textContent = integrantes.map(e => `${e.musicos?.nome || 'Integrante'} (${e.instrumento || 'Instrumento'})`).join(' • ');
+            evento.appendChild(nomes);
+          }
+          celula.appendChild(evento);
+        });
+        grade.appendChild(celula);
+      }
+      lista.appendChild(grade);
+      if (!cultos.length) {
+        const vazio = document.createElement('p');
+        vazio.textContent = 'Nenhum culto cadastrado neste mês. Use os botões para consultar outros meses.';
+        lista.appendChild(vazio);
+      }
     }
     async function carregarCultosPresenca() {
   const seletor = document.getElementById('culto-presenca');
