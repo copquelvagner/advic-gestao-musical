@@ -131,6 +131,7 @@
           <button type="button" id="btn-aplicar-ceia" hidden>Confirmar programação do mês</button>
           <p id="mensagem-ceia" class="status" role="status"></p>
         </div>
+<div id="importacao-mensal" hidden style="padding:16px;background:#f7faff;border:1px solid #dce5ef;border-radius:10px;margin:15px 0"><h3>📋 Importar escala mensal</h3><p>Cole o texto do WhatsApp/Word ou células do Excel (Data, Hora, Culto, Banda, Vocal). Confira antes de salvar. Registros existentes serão preservados.</p><label for="import-mes">Mês</label><input type="month" id="import-mes" value="2027-01"><label for="import-texto">Escala completa</label><textarea id="import-texto" rows="12" style="width:100%;padding:12px;font:inherit;border:1px solid #aab6c5;border-radius:6px" placeholder="DOMINGO — 03/01 — 09h&#10;Escola Bíblica Dominical&#10;Banda: Cristiano (Teclado), Caio (Bateria), Sérgio (Baixo)&#10;Vocal: Gisele, Laís, Crislayne e Gabriele"></textarea><button type="button" id="import-conferir">Conferir escala</button><div id="import-previa" style="overflow-x:auto;margin-top:12px"></div><button type="button" id="import-salvar" hidden>Confirmar importação</button><p id="import-msg" class="status" role="status"></p></div>
         <button type="button" id="btn-cadastrar-banda">Cadastrar na Escala</button>
         <div id="formulario-escala-banda" hidden>
           <h3>Nova escala da Banda</h3>
@@ -1843,6 +1844,86 @@ mensagem.textContent = erro?.code === '23505'
         await carregarCultos();await carregarCultosPresenca();
       }catch(e){msg.textContent='Não foi possível gravar: '+(e.message||e);console.error(e);}
       finally{btn.disabled=false;}
+    });
+
+
+    // Importação em lote: verifica antes de gravar, sem apagar registros.
+    let loteImportacao=null;
+    const normImp=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+    const horaImp=v=>{const m=String(v).match(/\b([01]?\d|2[0-3])\s*(?:h|:)([0-5]\d)?\b/i);return m?String(+m[1]).padStart(2,'0')+':'+(m[2]||'00'):null;};
+    const dataImp=(v,mes)=>{const m=String(v).match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\b/);if(!m)return null;const iso=`${m[3]||mes.slice(0,4)}-${String(+m[2]).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`;return dataLocalValida(iso)?iso:null;};
+    function parseImp(texto,mes){
+      const linhas=texto.replace(/\r/g,'').split('\n').map(x=>x.trim()).filter(Boolean),eventos=[],avisos=[];
+      if(linhas.some(x=>x.includes('\t'))){
+        for(const linha of linhas){if(!linha.includes('\t'))continue;const c=linha.split('\t').map(x=>x.trim());if(/^data$/i.test(c[0]))continue;const data=dataImp(c[0],mes),hora=horaImp(c[1]);if(!data||!hora||!c[2]){avisos.push('Linha Excel inválida: '+linha);continue;}eventos.push({data,hora,nome:c[2],banda:c[3]||'',vocal:c[4]||''});}
+      }else{
+        let atual=null;
+        for(const linha of linhas){const data=dataImp(linha,mes),hora=horaImp(linha);if(data&&hora){if(atual)eventos.push(atual);atual={data,hora,nome:'',banda:'',vocal:''};continue;}if(!atual)continue;if(/^banda\s*:/i.test(linha))atual.banda=linha.replace(/^banda\s*:/i,'').trim();else if(/^vocal\s*:/i.test(linha))atual.vocal=linha.replace(/^vocal\s*:/i,'').trim();else if(!atual.nome)atual.nome=linha;}
+        if(atual)eventos.push(atual);
+      }
+      return {eventos,avisos};
+    }
+    function membrosImp(e,avisos){
+      const itens=[],separar=t=>String(t||'').replace(/\s+e\s+/gi,', ').split(',').map(x=>x.trim()).filter(Boolean);
+      for(const trecho of separar(e.banda)){const m=trecho.match(/^(.+?)\s*\((Teclado|Bateria|Baixo|Guitarra|Viol[aã]o)\)$/i);if(!m){avisos.push(e.data+': instrumento não reconhecido em '+trecho);continue;}const inst={teclado:'Teclado',bateria:'Bateria',baixo:'Baixo',guitarra:'Guitarra',violao:'Violão'}[normImp(m[2])];itens.push({nome:m[1],instrumento:inst});}
+      if(!/^(não haverá|nao havera|sem vocal|-)$/i.test(e.vocal.trim()))for(const nome of separar(e.vocal))itens.push({nome,instrumento:'Voz'});
+      return itens;
+    }
+    const invalidarImp=()=>{loteImportacao=null;el('import-salvar').hidden=true;};
+    el('import-texto').addEventListener('input',invalidarImp);el('import-mes').addEventListener('change',invalidarImp);
+    el('import-conferir').addEventListener('click',async()=>{
+      invalidarImp();const btn=el('import-conferir'),msg=el('import-msg'),alvo=el('import-previa'),mes=el('import-mes').value,entrada=el('import-texto').value;alvo.replaceChildren();
+      if(el('importacao-mensal').hidden){msg.textContent='Sem permissão.';return;}
+      if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)||!entrada.trim()){msg.textContent='Escolha o mês e cole a escala.';return;}
+      btn.disabled=true;msg.textContent='Conferindo dados...';
+      try{
+        const {eventos,avisos}=parseImp(entrada,mes);if(!eventos.length)avisos.push('Nenhum culto reconhecido.');
+        const [ano,mm]=mes.split('-').map(Number),fim=mes+'-'+String(new Date(ano,mm,0).getDate()).padStart(2,'0');
+        const [rc,rm]=await Promise.all([supabaseClient.from('cultos').select('id,data_culto,horario,descricao').gte('data_culto',mes+'-01').lte('data_culto',fim),supabaseClient.from('musicos').select('*')]);
+        if(rc.error)throw rc.error;if(rm.error)throw rm.error;
+        const cultos=rc.data||[],musicos=rm.data||[],ids=cultos.map(c=>c.id);
+        const re=ids.length?await supabaseClient.from('escalas').select('culto_id,musico_id,instrumento').in('culto_id',ids):{data:[],error:null};if(re.error)throw re.error;
+        const existentes=re.data||[],pendentes=[],vistos=new Set(),pessoas=new Set(),instrumentos=new Set(),linhas=[];
+        for(const evento of eventos){
+          const chave=evento.data+' '+evento.hora;if(!evento.data.startsWith(mes+'-')){avisos.push('Data fora do mês: '+chave);continue;}
+          if(vistos.has(chave)){avisos.push('Culto repetido: '+chave);continue;}vistos.add(chave);
+          const encontrados=cultos.filter(c=>c.data_culto===evento.data&&String(c.horario||'').slice(0,5)===evento.hora);
+          if(encontrados.length!==1){avisos.push(chave+': '+(encontrados.length?'vários cultos encontrados':'culto ainda não cadastrado; cadastre no Calendário primeiro'));continue;}
+          const culto=encontrados[0];if(normImp(culto.descricao)!==normImp(evento.nome))linhas.push(chave+' — culto cadastrado: '+culto.descricao+' (texto: '+evento.nome+')');
+          const itens=membrosImp(evento,avisos);if(!itens.length)avisos.push(chave+': sem integrantes reconhecidos');
+          for(const item of itens){
+            const encontrados=musicos.filter(m=>m.ativo!==false&&normImp(m.nome)===normImp(item.nome));if(encontrados.length!==1){avisos.push(chave+': nome não encontrado de forma única: '+item.nome);continue;}
+            const musico=encontrados[0];if(!musico.departamento_id||!podeGerenciarDepartamento(musico.departamento_id)){avisos.push(chave+': sem permissão para '+item.nome);continue;}
+            if(item.instrumento==='Voz'){if(!(/voz|vocal|cantor/i.test(String(musico.instrumento_principal||''))||/vocal/i.test(String(musico.departamento||'')))){avisos.push(chave+': '+item.nome+' não pertence ao Vocal');continue;}}
+            else if(!instrumentosDoMusico(musico).includes(item.instrumento)){avisos.push(chave+': instrumento não cadastrado para '+item.nome);continue;}
+            const pk=culto.id+':'+musico.id,ik=culto.id+':'+item.instrumento;
+            if(pessoas.has(pk)||item.instrumento!=='Voz'&&instrumentos.has(ik)){avisos.push(chave+': integrante/instrumento repetido: '+item.nome);continue;}
+            pessoas.add(pk);if(item.instrumento!=='Voz')instrumentos.add(ik);
+            const atuais=existentes.filter(x=>String(x.culto_id)===String(culto.id));
+            if(atuais.some(x=>String(x.musico_id)===String(musico.id)&&x.instrumento===item.instrumento)){linhas.push(chave+' — '+item.nome+' ('+item.instrumento+'): já cadastrado');continue;}
+            if(atuais.some(x=>String(x.musico_id)===String(musico.id)||item.instrumento!=='Voz'&&x.instrumento===item.instrumento)){avisos.push(chave+': conflito existente: '+item.nome+' / '+item.instrumento);continue;}
+            pendentes.push({culto,musico,instrumento:item.instrumento});linhas.push(chave+' — '+item.nome+' ('+item.instrumento+'): a cadastrar');
+          }
+        }
+        const ul=document.createElement('ul');for(const texto of [...linhas,...avisos.map(a=>'ATENÇÃO: '+a)]){const li=document.createElement('li');li.textContent=texto;ul.appendChild(li);}alvo.appendChild(ul);
+        if(!avisos.length&&pendentes.length)loteImportacao={pendentes,entrada,mes};el('import-salvar').hidden=!loteImportacao;
+        msg.textContent=avisos.length?avisos.length+' pendência(s). Nenhuma alteração realizada.':pendentes.length+' escala(s) prontas para importar. Confira e confirme.';
+      }catch(e){msg.textContent='Erro: '+(e.message||e);console.error(e);}finally{btn.disabled=false;}
+    });
+    el('import-salvar').addEventListener('click',async()=>{
+      const plano=loteImportacao,msg=el('import-msg'),btn=el('import-salvar');if(!plano||el('importacao-mensal').hidden)return;
+      if(plano.entrada!==el('import-texto').value||plano.mes!==el('import-mes').value){msg.textContent='Confira novamente: o texto mudou.';return;}
+      if(!confirm('Importar '+plano.pendentes.length+' integrante(s)? Nenhuma escala existente será apagada.'))return;
+      btn.disabled=true;let salvos=0,pulados=0;
+      try{for(const p of plano.pendentes){
+        if(!podeGerenciarDepartamento(p.musico.departamento_id))throw new Error('Sem permissão para '+p.musico.nome);
+        const q=await supabaseClient.from('escalas').select('musico_id,instrumento').eq('culto_id',p.culto.id);if(q.error)throw q.error;
+        if((q.data||[]).some(e=>String(e.musico_id)===String(p.musico.id)&&e.instrumento===p.instrumento)){pulados++;continue;}
+        if((q.data||[]).some(e=>String(e.musico_id)===String(p.musico.id)||p.instrumento!=='Voz'&&e.instrumento===p.instrumento))throw new Error('Conflito em '+p.culto.data_culto+' para '+p.musico.nome);
+        const r=await supabaseClient.from('escalas').insert({culto_id:p.culto.id,musico_id:p.musico.id,departamento_id:p.musico.departamento_id,instrumento:p.instrumento});if(r.error)throw r.error;salvos++;
+      }msg.textContent=`Concluído: ${salvos} integrante(s) importado(s), ${pulados} já existente(s).`;
+      }catch(e){msg.textContent=`Interrompido após ${salvos} cadastro(s): ${e.message||e}. Confira novamente para continuar.`;console.error(e);}
+      finally{invalidarImp();btn.disabled=false;await carregarCultos();await carregarEscalaBanda();await carregarEscalaVocal();}
     });
 
     // Relatórios de presença por mês, com base nos registros salvos.
