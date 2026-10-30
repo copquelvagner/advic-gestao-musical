@@ -83,6 +83,24 @@
           <button type="button" id="btn-salvar-escala-auto" hidden>Confirmar e salvar proposta</button>
           <p id="mensagem-escala-auto" class="status" role="status"></p>
         </div>
+        <div id="escala-oficial-novembro" hidden style="padding:16px;border:1px solid #dce5ef;border-radius:10px;margin:15px 0;background:#f7faff">
+          <h3>Escala oficial — Novembro de 2026</h3>
+          <p>Confira e cadastre a escala aprovada. O sistema não apaga nem substitui escalas existentes e informa conflitos antes de gravar.</p>
+          <button type="button" id="btn-conferir-novembro">Conferir escala oficial</button>
+          <div id="previa-novembro" style="overflow-x:auto;margin-top:12px"></div>
+          <button type="button" id="btn-importar-novembro" hidden>Confirmar cadastro da escala oficial</button>
+          <p id="mensagem-novembro" class="status" role="status"></p>
+        </div>
+        <div id="programacao-ceia" hidden style="padding:16px;border:1px solid #dce5ef;border-radius:10px;margin:15px 0;background:#f7faff">
+          <h3>Ceia do Senhor — a partir de janeiro de 2027</h3>
+          <p>No segundo domingo: Ceia do Senhor das 09h às 11h, sem EBD. Nos demais domingos a EBD permanece às 09h.</p>
+          <label for="mes-programacao-ceia">Mês a programar</label>
+          <input id="mes-programacao-ceia" type="month" min="2027-01" value="2027-01">
+          <button type="button" id="btn-conferir-ceia">Conferir programação do mês</button>
+          <div id="previa-ceia" style="margin-top:12px"></div>
+          <button type="button" id="btn-aplicar-ceia" hidden>Confirmar programação do mês</button>
+          <p id="mensagem-ceia" class="status" role="status"></p>
+        </div>
         <button type="button" id="btn-cadastrar-banda">Cadastrar na Escala</button>
         <div id="formulario-escala-banda" hidden>
           <h3>Nova escala da Banda</h3>
@@ -1417,6 +1435,170 @@ mensagem.textContent = erro?.code === '23505'
         await carregarEscalaBanda();
       } catch(e) {msg.textContent=`${salvos} salva(s) antes do erro: ${e.message||e}. Gere uma nova proposta para continuar.`;propostaBanda=[];botao.hidden=true;console.error(e);await carregarEscalaBanda();}
       finally {botao.disabled=false;}
+    });
+
+
+    // Escala oficial aprovada em 30/10/2026: cadastro sob confirmação do administrador.
+    // Cada entrada: data, turno (M = 09:00, N = 19:00, S = 19:30), baixo, bateria, teclado.
+    const ESCALA_NOVEMBRO_OFICIAL = [
+      ['01','M','Sérgio','Caio','Cristiano'],
+      ['01','N','Pietro','Guilherme','Gustavo'],
+      ['02','S',null,'Pietro','Cristiano'],
+      ['04','S',null,'Guilherme','Cristiano'],
+      ['08','M','Pietro','Caio','Gustavo'],
+      ['08','N','Sérgio','Guilherme','Cristiano'],
+      ['09','S',null,'Pietro','Cristiano'],
+      ['11','S',null,'Guilherme','Cristiano'],
+      ['15','M','Sérgio','Pietro','Cristiano'],
+      ['15','N','Pietro','Caio','Gustavo'],
+      ['16','S',null,'Pietro','Cristiano'],
+      ['18','S',null,'Guilherme','Cristiano'],
+      ['22','M','Sérgio','Guilherme','Gustavo'],
+      ['22','N','Pietro','Caio','Cristiano'],
+      ['23','S',null,'Pietro','Cristiano'],
+      ['25','S',null,'Guilherme','Cristiano'],
+      ['29','M','Pietro','Guilherme','Cristiano'],
+      ['29','N','Sérgio','Caio','Gustavo'],
+      ['30','S',null,'Pietro','Cristiano']
+    ];
+    let importacaoNovembro = null;
+    let programacaoCeiaPendente = null;
+    const normalizarHora = h => String(h || '').slice(0,5);
+    const horaTurno = t => t === 'M' ? '09:00' : t === 'N' ? '19:00' : '19:30';
+    const nomeCultoEsperado = t => t === 'M' ? 'Escola Bíblica Dominical' : t === 'S' ? 'Culto' : 'Culto noturno';
+    function adminAtivo() { return perfilAtual?.ativo === true && perfilAtual?.papel === 'administrador'; }
+    function textoLista(alvo, linhas) {
+      alvo.replaceChildren();
+      const lista = document.createElement('ul');
+      linhas.forEach(t => { const li=document.createElement('li');li.textContent=t;lista.appendChild(li); });
+      alvo.appendChild(lista);
+    }
+    el('btn-conferir-novembro').addEventListener('click', async () => {
+      const msg=el('mensagem-novembro'), btn=el('btn-conferir-novembro');
+      el('btn-importar-novembro').hidden=true;importacaoNovembro=null;
+      if (!adminAtivo()) {msg.textContent='Somente o administrador pode importar a escala oficial.';return;}
+      btn.disabled=true;msg.textContent='Conferindo cultos, músicos e escalas já existentes...';
+      try {
+        const [rc,rm]=await Promise.all([
+          supabaseClient.from('cultos').select('id,data_culto,horario,descricao').gte('data_culto','2026-11-01').lte('data_culto','2026-11-30'),
+          supabaseClient.from('musicos').select('*')
+        ]);
+        if(rc.error) throw rc.error;if(rm.error) throw rm.error;
+        const cultos=rc.data||[], musicos=rm.data||[];
+        const ids=cultos.map(c=>c.id);
+        const re=ids.length ? await supabaseClient.from('escalas').select('id,culto_id,musico_id,instrumento').in('culto_id',ids) : {data:[],error:null};
+        if(re.error) throw re.error;
+        const existentes=re.data||[], pendentes=[], avisos=[], linhas=[];
+        for(const [dia,turno,baixo,bateria,teclado] of ESCALA_NOVEMBRO_OFICIAL) {
+          const data=`2026-11-${dia}`, hora=horaTurno(turno);
+          const encontrados=cultos.filter(c=>c.data_culto===data && normalizarHora(c.horario)===hora);
+          const titulo=`${dia}/11 ${hora}`;
+          if(encontrados.length!==1) {avisos.push(`${titulo}: ${encontrados.length?'mais de um culto':'culto não encontrado'} nesse horário. Confira o calendário.`);continue;}
+          const culto=encontrados[0];
+          for(const [instrumento,nome] of [['Baixo',baixo],['Bateria',bateria],['Teclado',teclado]]) {
+            if(!nome) continue;
+            const correspondentes=musicos.filter(m=>nomeNormalizado(m.nome)===nomeNormalizado(nome) && m.ativo!==false);
+            if(correspondentes.length!==1) {avisos.push(`${titulo}: músico ${nome} não encontrado de forma única.`);continue;}
+            const musico=correspondentes[0];
+            if(!instrumentosDoMusico(musico).includes(instrumento)) {avisos.push(`${titulo}: ${nome} não tem ${instrumento} no cadastro de instrumentos.`);continue;}
+            if(!musico.departamento_id || !podeGerenciarDepartamento(musico.departamento_id)) {avisos.push(`${titulo}: sem permissão/departamento para ${nome}.`);continue;}
+            const doCulto=existentes.filter(e=>String(e.culto_id)===String(culto.id));
+            const igual=doCulto.some(e=>String(e.musico_id)===String(musico.id) && e.instrumento===instrumento);
+            if(igual) {linhas.push(`${titulo} — ${instrumento}: ${nome} (já cadastrado)`);continue;}
+            if(doCulto.some(e=>String(e.musico_id)===String(musico.id) || e.instrumento===instrumento)) {
+              avisos.push(`${titulo}: conflito para ${instrumento} / ${nome}; há escala diferente cadastrada.`);continue;
+            }
+            pendentes.push({culto_id:culto.id,musico_id:musico.id,departamento_id:musico.departamento_id,instrumento,nome,data,hora});
+            linhas.push(`${titulo} — ${instrumento}: ${nome} (a cadastrar)`);
+          }
+        }
+        textoLista(el('previa-novembro'),[...linhas,...avisos.map(a=>'ATENÇÃO: '+a)]);
+        importacaoNovembro={pendentes,avisos};
+        el('btn-importar-novembro').hidden=!pendentes.length || avisos.length>0;
+        msg.textContent=avisos.length
+          ? `${avisos.length} pendência(s) encontrada(s). Nenhum registro foi alterado. Corrija as pendências antes de confirmar.`
+          : `${pendentes.length} escala(s) a cadastrar. As já cadastradas serão mantidas. Confira e confirme.`;
+      } catch(e) {msg.textContent='Erro na conferência: '+(e.message||e);console.error(e);}
+      finally {btn.disabled=false;}
+    });
+    el('btn-importar-novembro').addEventListener('click',async()=>{
+      if(!adminAtivo()||!importacaoNovembro||importacaoNovembro.avisos.length)return;
+      const registros=importacaoNovembro.pendentes;
+      if(!confirm(`Cadastrar ${registros.length} escala(s) oficiais de novembro? Nenhuma escala existente será apagada.`))return;
+      const btn=el('btn-importar-novembro'),msg=el('mensagem-novembro');btn.disabled=true;
+      let salvos=0,pulados=0;
+      try {
+        for(const r of registros) {
+          const q=await supabaseClient.from('escalas').select('id,musico_id,instrumento').eq('culto_id',r.culto_id);
+          if(q.error)throw q.error;
+          if((q.data||[]).some(e=>String(e.musico_id)===String(r.musico_id)&&e.instrumento===r.instrumento)){pulados++;continue;}
+          if((q.data||[]).some(e=>String(e.musico_id)===String(r.musico_id)||e.instrumento===r.instrumento))throw new Error(`Conflito em ${r.data} ${r.hora}, ${r.instrumento}. Nenhuma escala foi substituída.`);
+          const ins=await supabaseClient.from('escalas').insert({culto_id:r.culto_id,musico_id:r.musico_id,departamento_id:r.departamento_id,instrumento:r.instrumento});
+          if(ins.error)throw ins.error;salvos++;
+        }
+        msg.textContent=`Concluído: ${salvos} escala(s) cadastrada(s), ${pulados} já existente(s).`;
+      }catch(e){msg.textContent=`${salvos} cadastrada(s) antes da interrupção: ${e.message||e}. Confira novamente antes de continuar.`;console.error(e);}
+      finally {importacaoNovembro=null;btn.hidden=true;btn.disabled=false;await carregarEscalaBanda();}
+    });
+    function segundoDomingo(ano,mes) {
+      const primeiro=new Date(ano,mes-1,1).getDay();
+      return 1+((7-primeiro)%7)+7;
+    }
+    el('btn-conferir-ceia').addEventListener('click',async()=>{
+      const mes=el('mes-programacao-ceia').value,msg=el('mensagem-ceia');
+      programacaoCeiaPendente=null;el('btn-aplicar-ceia').hidden=true;
+      if(!adminAtivo()){msg.textContent='Apenas o administrador pode programar os cultos.';return;}
+      if(!/^\d{4}-\d{2}$/.test(mes)||mes<'2027-01'){msg.textContent='Selecione janeiro de 2027 ou um mês posterior.';return;}
+      const [ano,m]=mes.split('-').map(Number),dia=segundoDomingo(ano,m);
+      const data=`${mes}-${String(dia).padStart(2,'0')}`;
+      const btn=el('btn-conferir-ceia');btn.disabled=true;msg.textContent='Conferindo calendário...';
+      try{
+        const rc=await supabaseClient.from('cultos').select('*').eq('data_culto',data);
+        if(rc.error)throw rc.error;
+        const cultos=rc.data||[];
+        const ceias=cultos.filter(c=>/ceia/i.test(c.descricao||''));
+        const ebds=cultos.filter(c=>/escola bíblica|escola biblica|\bebd\b/i.test(c.descricao||''));
+        const avisos=[];let acao=null;
+        if(ceias.length>1)avisos.push('Há mais de uma Ceia cadastrada nessa data. É necessário conferir manualmente.');
+        else if(ceias.length===1) {
+          const ceia=ceias[0];
+          if(ebds.length)avisos.push('Existe EBD junto com a Ceia no segundo domingo. Confira os registros antes de modificar.');
+          if(ceia.descricao==='Ceia do Senhor' && normalizarHora(ceia.horario)==='09:00')acao={tipo:'pronto'};
+          else if(!avisos.length)acao={tipo:'atualizar',culto:ceia};
+        }else if(ebds.length===1)acao={tipo:'atualizar',culto:ebds[0]};
+        else if(ebds.length>1)avisos.push('Há mais de uma EBD cadastrada nesse dia.');
+        else acao={tipo:'criar'};
+        const linhas=[`${data.split('-').reverse().join('/')} — Ceia do Senhor, 09h às 11h; sem EBD.`];
+        if(acao?.tipo==='atualizar')linhas.push(`O culto existente “${acao.culto.descricao}” (${normalizarHora(acao.culto.horario)}) será atualizado, mantendo seu identificador e escalas vinculadas.`);
+        if(acao?.tipo==='criar')linhas.push('Será criado um culto novo no calendário.');
+        if(acao?.tipo==='pronto')linhas.push('A Ceia do Senhor já está programada corretamente.');
+        linhas.push(...avisos.map(a=>'ATENÇÃO: '+a));
+        textoLista(el('previa-ceia'),linhas);
+        programacaoCeiaPendente=avisos.length?null:{data,acao};
+        el('btn-aplicar-ceia').hidden=!!avisos.length||!acao||acao.tipo==='pronto';
+        msg.textContent=avisos.length?'Não foi feita nenhuma alteração. Resolva os avisos primeiro.':acao?.tipo==='pronto'?'Programação já cadastrada.':'Confira e confirme para gravar a alteração.';
+      }catch(e){msg.textContent='Erro ao consultar programação: '+(e.message||e);console.error(e);}
+      finally{btn.disabled=false;}
+    });
+    el('btn-aplicar-ceia').addEventListener('click',async()=>{
+      if(!adminAtivo()||!programacaoCeiaPendente)return;
+      const {data,acao}=programacaoCeiaPendente;
+      if(!confirm(`Confirmar Ceia do Senhor em ${data.split('-').reverse().join('/')} às 09h? A EBD desse domingo não ocorrerá.`))return;
+      const btn=el('btn-aplicar-ceia'),msg=el('mensagem-ceia');btn.disabled=true;
+      try{
+        let r;
+        if(acao.tipo==='atualizar') {
+          r=await supabaseClient.from('cultos').update({descricao:'Ceia do Senhor',horario:'09:00:00',periodo:'Manhã'}).eq('id',acao.culto.id).select('id');
+        }else if(acao.tipo==='criar') {
+          r=await supabaseClient.from('cultos').insert({data_culto:data,descricao:'Ceia do Senhor',horario:'09:00:00',periodo:'Manhã'}).select('id');
+        }else return;
+        if(r.error)throw r.error;
+        if(!r.data?.length)throw new Error('O banco não confirmou a gravação. Confira as permissões.');
+        msg.textContent='Ceia do Senhor programada com sucesso. Repita para os outros meses desejados.';
+        programacaoCeiaPendente=null;btn.hidden=true;
+        await carregarCultos();await carregarCultosPresenca();
+      }catch(e){msg.textContent='Não foi possível gravar: '+(e.message||e);console.error(e);}
+      finally{btn.disabled=false;}
     });
 
     // Relatórios de presença por mês, com base nos registros salvos.
