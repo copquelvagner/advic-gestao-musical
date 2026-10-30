@@ -73,6 +73,16 @@
         <h2>🎹 Escala da Banda</h2>
         <p>Organize os músicos de cada culto.</p>
         <div id="lista-escala-banda">Carregando escala...</div>
+        <div id="gerador-banda" hidden style="padding:16px;border:1px solid #dce5ef;border-radius:10px;margin:15px 0;background:#f7faff">
+          <h3>Gerador de escala da Banda</h3>
+          <p>Monte uma proposta para o mês, confira e só depois salve. As escalas existentes serão preservadas.</p>
+          <label for="mes-escala-auto">Mês</label>
+          <input id="mes-escala-auto" type="month">
+          <button type="button" id="btn-prever-escala">Gerar proposta</button>
+          <div id="previa-escala-auto" style="overflow-x:auto;margin-top:12px"></div>
+          <button type="button" id="btn-salvar-escala-auto" hidden>Confirmar e salvar proposta</button>
+          <p id="mensagem-escala-auto" class="status" role="status"></p>
+        </div>
         <button type="button" id="btn-cadastrar-banda">Cadastrar na Escala</button>
         <div id="formulario-escala-banda" hidden>
           <h3>Nova escala da Banda</h3>
@@ -1150,6 +1160,7 @@ mensagem.textContent = erro?.code === '23505'
       const admin = perfilAtual?.ativo === true && perfilAtual.papel === 'administrador';
       const lider = perfilAtual?.ativo === true && perfilAtual.papel === 'lider';
       el('btn-cadastrar-banda').hidden = !(admin || (lider && departamentosLiderados.some(id => String(id) === '8288207d-2520-4ac2-a169-bb7714144617')));
+      el('gerador-banda').hidden = el('btn-cadastrar-banda').hidden;
       el('btn-cadastrar-vocal').hidden = !(admin || (lider && departamentosLiderados.length > 0));
     }
 
@@ -1270,6 +1281,143 @@ mensagem.textContent = erro?.code === '23505'
       }
     });
 
+
+    // Gerador conservador: proposta em memória; nunca altera registros existentes.
+    let propostaBanda = [];
+    const mesAuto = el('mes-escala-auto');
+    mesAuto.value = `${new Date().getFullYear()}-${String(new Date().getMonth() + 2).padStart(2, '0')}`;
+    if (Number(mesAuto.value.slice(5)) > 12) mesAuto.value = `${new Date().getFullYear() + 1}-01`;
+
+    function nomeNormalizado(nome) {
+      return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    }
+    function dataLocalDia(data) {
+      const [a,m,d] = data.split('-').map(Number);
+      return new Date(a,m-1,d).getDay();
+    }
+    function permitidoNoCulto(musico, culto) {
+      const dia = dataLocalDia(culto.data_culto);
+      const nome = nomeNormalizado(musico.nome);
+      if ([1,3].includes(dia) && ['sergio','gustavo'].includes(nome)) return false;
+      return true;
+    }
+    function ehNoite(culto) {
+      return Number(String(culto.horario || '00:00').slice(0,2)) >= 17;
+    }
+    function mostrarPropostaBanda() {
+      const alvo = el('previa-escala-auto');
+      alvo.replaceChildren();
+      if (!propostaBanda.length) { alvo.textContent = 'Nenhuma vaga disponível para preencher automaticamente neste mês.'; return; }
+      const tabela = document.createElement('table');
+      tabela.style.cssText = 'width:100%;border-collapse:collapse;min-width:520px';
+      const cab = document.createElement('tr');
+      ['Culto', 'Instrumento', 'Músico', 'Ação'].forEach(t => {
+        const th = document.createElement('th'); th.textContent=t; th.style.cssText='padding:8px;border-bottom:1px solid #ccd5e0;text-align:left'; cab.appendChild(th);
+      });
+      tabela.appendChild(cab);
+      propostaBanda.forEach((p, i) => {
+        const tr = document.createElement('tr');
+        const dados = [`${p.culto.data_culto.split('-').reverse().join('/')} ${String(p.culto.horario||'').slice(0,5)} — ${p.culto.descricao||'Culto'}`, p.instrumento, p.musico.nome];
+        dados.forEach(v=>{const td=document.createElement('td');td.textContent=v;td.style.cssText='padding:8px;border-bottom:1px solid #e2e7ed';tr.appendChild(td);});
+        const td=document.createElement('td');
+        const remover=document.createElement('button');remover.type='button';remover.textContent='Retirar';
+        remover.onclick=()=>{propostaBanda.splice(i,1);mostrarPropostaBanda();el('btn-salvar-escala-auto').hidden=!propostaBanda.length;};
+        td.appendChild(remover);tr.appendChild(td);tabela.appendChild(tr);
+      });
+      alvo.appendChild(tabela);
+    }
+    el('btn-prever-escala').addEventListener('click', async () => {
+      const msg = el('mensagem-escala-auto');
+      const btn = el('btn-prever-escala');
+      propostaBanda = [];
+      el('btn-salvar-escala-auto').hidden = true;
+      el('previa-escala-auto').replaceChildren();
+      const mes = mesAuto.value;
+      if (!/^\d{4}-\d{2}$/.test(mes)) {msg.textContent='Escolha um mês.';return;}
+      if (el('gerador-banda').hidden) {msg.textContent='Acesso não autorizado.';return;}
+      btn.disabled=true;msg.textContent='Preparando proposta...';
+      try {
+        const [ano, numero] = mes.split('-').map(Number);
+        const fim = `${mes}-${String(new Date(ano,numero,0).getDate()).padStart(2,'0')}`;
+        const [rc, rm] = await Promise.all([
+          supabaseClient.from('cultos').select('id,data_culto,horario,descricao').gte('data_culto',`${mes}-01`).lte('data_culto',fim).order('data_culto').order('horario'),
+          supabaseClient.from('musicos').select('*').order('nome')
+        ]);
+        if (rc.error) throw rc.error;
+        if (rm.error) throw rm.error;
+        const cultos=rc.data||[];
+        const musicos=(rm.data||[]).filter(m=>m.ativo!==false && instrumentosDoMusico(m).length && podeGerenciarDepartamento(m.departamento_id));
+        if (!cultos.length) {msg.textContent='Nenhum culto cadastrado para esse mês. Cadastre os cultos primeiro.';return;}
+        if (!musicos.length) {msg.textContent='Nenhum músico autorizado encontrado.';return;}
+        const re = await supabaseClient.from('escalas').select('culto_id,musico_id,instrumento').in('culto_id',cultos.map(c=>c.id));
+        if (re.error) throw re.error;
+        const existentes=re.data||[];
+        const ocupados=new Set(existentes.map(e=>`${e.culto_id}:${e.instrumento}`));
+        const pessoasNoCulto=new Set(existentes.map(e=>`${e.culto_id}:${e.musico_id}`));
+        const contagem=new Map();
+        existentes.forEach(e=>contagem.set(String(e.musico_id),(contagem.get(String(e.musico_id))||0)+1));
+        let ultimoBaterista='';
+        const domingosNoite=cultos.filter(c=>dataLocalDia(c.data_culto)===0 && ehNoite(c));
+        const domingosGustavo=new Set(domingosNoite.slice(0,3).map(c=>String(c.id)));
+        for (const culto of cultos) {
+          const dia=dataLocalDia(culto.data_culto);
+          for (const instrumento of ['Teclado','Bateria','Guitarra','Baixo']) {
+            if ([1,3].includes(dia) && instrumento==='Baixo') continue;
+            if (ocupados.has(`${culto.id}:${instrumento}`)) continue;
+            let candidatos=musicos.filter(m=>instrumentosDoMusico(m).includes(instrumento) && permitidoNoCulto(m,culto) && !pessoasNoCulto.has(`${culto.id}:${m.id}`));
+            if (instrumento==='Teclado') {
+              const cristiano=candidatos.find(m=>nomeNormalizado(m.nome)==='cristiano');
+              if (cristiano) candidatos=[cristiano];
+            }
+            if (instrumento==='Bateria') {
+              if (domingosGustavo.has(String(culto.id))) {
+                const gustavo=candidatos.find(m=>nomeNormalizado(m.nome)==='gustavo');
+                if (gustavo) candidatos=[gustavo];
+              } else {
+                const alternados=candidatos.filter(m=>['pietro','guilherme'].includes(nomeNormalizado(m.nome)));
+                if (alternados.length) {
+                  const proximo=alternados.find(m=>nomeNormalizado(m.nome)!==ultimoBaterista);
+                  candidatos=[proximo||alternados[0]];
+                }
+              }
+            }
+            candidatos.sort((a,b)=>(contagem.get(String(a.id))||0)-(contagem.get(String(b.id))||0)||a.nome.localeCompare(b.nome,'pt-BR'));
+            const escolhido=candidatos[0];
+            if (!escolhido) continue;
+            propostaBanda.push({culto,musico:escolhido,instrumento});
+            ocupados.add(`${culto.id}:${instrumento}`);
+            pessoasNoCulto.add(`${culto.id}:${escolhido.id}`);
+            contagem.set(String(escolhido.id),(contagem.get(String(escolhido.id))||0)+1);
+            if (instrumento==='Bateria' && ['pietro','guilherme'].includes(nomeNormalizado(escolhido.nome))) ultimoBaterista=nomeNormalizado(escolhido.nome);
+          }
+        }
+        mostrarPropostaBanda();
+        el('btn-salvar-escala-auto').hidden=!propostaBanda.length;
+        msg.textContent=`${propostaBanda.length} sugestão(ões) gerada(s). Confira antes de salvar. O sistema não conhece indisponibilidades ocasionais.`;
+      } catch(e) {msg.textContent='Erro ao gerar proposta: '+(e.message||e);console.error(e);}
+      finally {btn.disabled=false;}
+    });
+    el('btn-salvar-escala-auto').addEventListener('click', async () => {
+      if (!propostaBanda.length || el('gerador-banda').hidden) return;
+      if (!confirm(`Salvar ${propostaBanda.length} escala(s) sugerida(s)? As existentes não serão substituídas.`)) return;
+      const botao=el('btn-salvar-escala-auto');const msg=el('mensagem-escala-auto');
+      botao.disabled=true;let salvos=0;let pulados=0;
+      try {
+        for (const p of [...propostaBanda]) {
+          if (!podeGerenciarDepartamento(p.musico.departamento_id)) throw new Error('Sem permissão para este departamento.');
+          const consulta=await supabaseClient.from('escalas').select('id,musico_id,instrumento').eq('culto_id',p.culto.id);
+          if (consulta.error) throw consulta.error;
+          if ((consulta.data||[]).some(e=>String(e.musico_id)===String(p.musico.id)||e.instrumento===p.instrumento)) {pulados++;continue;}
+          const r=await supabaseClient.from('escalas').insert({culto_id:p.culto.id,musico_id:p.musico.id,departamento_id:p.musico.departamento_id,instrumento:p.instrumento});
+          if (r.error) throw r.error;
+          salvos++;
+        }
+        propostaBanda=[];el('previa-escala-auto').replaceChildren();botao.hidden=true;
+        msg.textContent=`${salvos} escala(s) salva(s). ${pulados} ignorada(s) porque já estavam ocupadas.`;
+        await carregarEscalaBanda();
+      } catch(e) {msg.textContent=`${salvos} salva(s) antes do erro: ${e.message||e}. Gere uma nova proposta para continuar.`;propostaBanda=[];botao.hidden=true;console.error(e);await carregarEscalaBanda();}
+      finally {botao.disabled=false;}
+    });
 
     // Relatórios de presença por mês, com base nos registros salvos.
     function formatarDataRelatorio(data) {
