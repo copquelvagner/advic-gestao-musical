@@ -131,7 +131,7 @@
           <button type="button" id="btn-aplicar-ceia" hidden>Confirmar programação do mês</button>
           <p id="mensagem-ceia" class="status" role="status"></p>
         </div>
-<div id="importacao-mensal"  style="padding:16px;background:#f7faff;border:1px solid #dce5ef;border-radius:10px;margin:15px 0"><h3>📋 Importar escala mensal</h3><p>Cole o texto do WhatsApp/Word ou células do Excel (Data, Hora, Culto, Banda, Vocal). Confira antes de salvar. Registros existentes serão preservados.</p><label for="import-mes">Mês</label><input type="month" id="import-mes" value="2027-01"><label for="import-texto">Escala completa</label><textarea id="import-texto" rows="12" style="width:100%;padding:12px;font:inherit;border:1px solid #aab6c5;border-radius:6px" placeholder="DOMINGO — 03/01 — 09h&#10;Escola Bíblica Dominical&#10;Banda: Cristiano (Teclado), Caio (Bateria), Sérgio (Baixo)&#10;Vocal: Gisele, Laís, Crislayne e Gabriele"></textarea><button type="button" id="import-conferir">Conferir escala</button><div id="import-previa" style="overflow-x:auto;margin-top:12px"></div><button type="button" id="import-salvar" hidden>Confirmar importação</button><p id="import-msg" class="status" role="status"></p></div>
+<div id="importacao-mensal" hidden style="padding:16px;background:#f7faff;border:1px solid #dce5ef;border-radius:10px;margin:15px 0"><h3>📋 Importar escala mensal</h3><p>Cole o texto do WhatsApp/Word ou células do Excel (Data, Hora, Culto, Banda, Vocal). O sistema poderá criar cultos ausentes e suas escalas após sua confirmação. Registros existentes serão preservados.</p><label for="import-mes">Mês</label><input type="month" id="import-mes" value="2027-01"><label for="import-texto">Escala completa</label><textarea id="import-texto" rows="12" style="width:100%;padding:12px;font:inherit;border:1px solid #aab6c5;border-radius:6px" placeholder="DOMINGO — 03/01 — 09h&#10;Escola Bíblica Dominical&#10;Banda: Cristiano (Teclado), Caio (Bateria), Sérgio (Baixo)&#10;Vocal: Gisele, Laís, Crislayne e Gabriele"></textarea><button type="button" id="import-conferir">Conferir escala</button><div id="import-previa" style="overflow-x:auto;margin-top:12px"></div><button type="button" id="import-salvar" hidden>Confirmar importação</button><p id="import-msg" class="status" role="status"></p></div>
         <button type="button" id="btn-cadastrar-banda">Cadastrar na Escala</button>
         <div id="formulario-escala-banda" hidden>
           <h3>Nova escala da Banda</h3>
@@ -1883,20 +1883,28 @@ mensagem.textContent = erro?.code === '23505'
         if(rc.error)throw rc.error;if(rm.error)throw rm.error;
         const cultos=rc.data||[],musicos=rm.data||[],ids=cultos.map(c=>c.id);
         const re=ids.length?await supabaseClient.from('escalas').select('culto_id,musico_id,instrumento').in('culto_id',ids):{data:[],error:null};if(re.error)throw re.error;
-        const existentes=re.data||[],pendentes=[],vistos=new Set(),pessoas=new Set(),instrumentos=new Set(),linhas=[];
+        const existentes=re.data||[],pendentes=[],novosCultos=[],vistos=new Set(),pessoas=new Set(),instrumentos=new Set(),linhas=[];
         for(const evento of eventos){
           const chave=evento.data+' '+evento.hora;if(!evento.data.startsWith(mes+'-')){avisos.push('Data fora do mês: '+chave);continue;}
           if(vistos.has(chave)){avisos.push('Culto repetido: '+chave);continue;}vistos.add(chave);
           const encontrados=cultos.filter(c=>c.data_culto===evento.data&&String(c.horario||'').slice(0,5)===evento.hora);
-          if(encontrados.length!==1){avisos.push(chave+': '+(encontrados.length?'vários cultos encontrados':'culto ainda não cadastrado; cadastre no Calendário primeiro'));continue;}
-          const culto=encontrados[0];if(normImp(culto.descricao)!==normImp(evento.nome))linhas.push(chave+' — culto cadastrado: '+culto.descricao+' (texto: '+evento.nome+')');
+          if(encontrados.length>1){avisos.push(chave+': vários cultos encontrados. Confira o Calendário.');continue;}
+          if(!encontrados.length&&!adminAtivo()){avisos.push(chave+': só o administrador pode criar cultos ausentes.');continue;}
+          const culto=encontrados[0]||{id:null,data_culto:evento.data,horario:evento.hora+':00',descricao:evento.nome};
+          if(!encontrados.length){
+            if(!evento.nome.trim()){avisos.push(chave+': falta o nome do culto.');continue;}
+            novosCultos.push(culto);linhas.push(chave+' — NOVO CULTO: '+evento.nome);
+          }else if(normImp(culto.descricao)!==normImp(evento.nome)){
+            linhas.push(chave+' — culto existente: '+culto.descricao+' (no texto: '+evento.nome+'); nome preservado');
+          }
           const itens=membrosImp(evento,avisos);if(!itens.length)avisos.push(chave+': sem integrantes reconhecidos');
           for(const item of itens){
             const encontrados=musicos.filter(m=>m.ativo!==false&&normImp(m.nome)===normImp(item.nome));if(encontrados.length!==1){avisos.push(chave+': nome não encontrado de forma única: '+item.nome);continue;}
             const musico=encontrados[0];if(!musico.departamento_id||!podeGerenciarDepartamento(musico.departamento_id)){avisos.push(chave+': sem permissão para '+item.nome);continue;}
             if(item.instrumento==='Voz'){if(!(/voz|vocal|cantor/i.test(String(musico.instrumento_principal||''))||/vocal/i.test(String(musico.departamento||'')))){avisos.push(chave+': '+item.nome+' não pertence ao Vocal');continue;}}
             else if(!instrumentosDoMusico(musico).includes(item.instrumento)){avisos.push(chave+': instrumento não cadastrado para '+item.nome);continue;}
-            const pk=culto.id+':'+musico.id,ik=culto.id+':'+item.instrumento;
+            const chaveCulto=culto.id||chave;
+            const pk=chaveCulto+':'+musico.id,ik=chaveCulto+':'+item.instrumento;
             if(pessoas.has(pk)||item.instrumento!=='Voz'&&instrumentos.has(ik)){avisos.push(chave+': integrante/instrumento repetido: '+item.nome);continue;}
             pessoas.add(pk);if(item.instrumento!=='Voz')instrumentos.add(ik);
             const atuais=existentes.filter(x=>String(x.culto_id)===String(culto.id));
@@ -1906,23 +1914,36 @@ mensagem.textContent = erro?.code === '23505'
           }
         }
         const ul=document.createElement('ul');for(const texto of [...linhas,...avisos.map(a=>'ATENÇÃO: '+a)]){const li=document.createElement('li');li.textContent=texto;ul.appendChild(li);}alvo.appendChild(ul);
-        if(!avisos.length&&pendentes.length)loteImportacao={pendentes,entrada,mes};el('import-salvar').hidden=!loteImportacao;
-        msg.textContent=avisos.length?avisos.length+' pendência(s). Nenhuma alteração realizada.':pendentes.length+' escala(s) prontas para importar. Confira e confirme.';
+        if(!avisos.length&&(pendentes.length||novosCultos.length))loteImportacao={pendentes,novosCultos,entrada,mes};el('import-salvar').hidden=!loteImportacao;
+        msg.textContent=avisos.length?avisos.length+' pendência(s). Nenhuma alteração realizada.':novosCultos.length+' culto(s) novo(s) e '+pendentes.length+' integrante(s) prontos para importar. Confira e confirme.';
       }catch(e){msg.textContent='Erro: '+(e.message||e);console.error(e);}finally{btn.disabled=false;}
     });
     el('import-salvar').addEventListener('click',async()=>{
       const plano=loteImportacao,msg=el('import-msg'),btn=el('import-salvar');if(!plano||el('importacao-mensal').hidden)return;
       if(plano.entrada!==el('import-texto').value||plano.mes!==el('import-mes').value){msg.textContent='Confira novamente: o texto mudou.';return;}
-      if(!confirm('Importar '+plano.pendentes.length+' integrante(s)? Nenhuma escala existente será apagada.'))return;
-      btn.disabled=true;let salvos=0,pulados=0;
-      try{for(const p of plano.pendentes){
+      if(!confirm('Criar '+plano.novosCultos.length+' culto(s) e importar '+plano.pendentes.length+' integrante(s)? Nenhum registro existente será apagado.'))return;
+      btn.disabled=true;let salvos=0,pulados=0,cultosCriados=0;
+      try{
+        for(const culto of plano.novosCultos){
+          if(!adminAtivo())throw new Error('Somente o administrador pode cadastrar novos cultos.');
+          const q=await supabaseClient.from('cultos').select('id').eq('data_culto',culto.data_culto).eq('horario',culto.horario);
+          if(q.error)throw q.error;
+          if((q.data||[]).length>1)throw new Error('Mais de um culto encontrado em '+culto.data_culto+' '+culto.horario);
+          if(q.data?.length){culto.id=q.data[0].id;continue;}
+          const h=Number(culto.horario.slice(0,2));
+          const r=await supabaseClient.from('cultos').insert({data_culto:culto.data_culto,horario:culto.horario,periodo:h<12?'Manhã':h<18?'Tarde':'Noite',descricao:culto.descricao}).select('id');
+          if(r.error)throw r.error;
+          if(!r.data?.[0]?.id)throw new Error('Banco não confirmou a criação do culto '+culto.data_culto);
+          culto.id=r.data[0].id;cultosCriados++;
+        }
+        for(const p of plano.pendentes){
         if(!podeGerenciarDepartamento(p.musico.departamento_id))throw new Error('Sem permissão para '+p.musico.nome);
         const q=await supabaseClient.from('escalas').select('musico_id,instrumento').eq('culto_id',p.culto.id);if(q.error)throw q.error;
         if((q.data||[]).some(e=>String(e.musico_id)===String(p.musico.id)&&e.instrumento===p.instrumento)){pulados++;continue;}
         if((q.data||[]).some(e=>String(e.musico_id)===String(p.musico.id)||p.instrumento!=='Voz'&&e.instrumento===p.instrumento))throw new Error('Conflito em '+p.culto.data_culto+' para '+p.musico.nome);
         const r=await supabaseClient.from('escalas').insert({culto_id:p.culto.id,musico_id:p.musico.id,departamento_id:p.musico.departamento_id,instrumento:p.instrumento});if(r.error)throw r.error;salvos++;
-      }msg.textContent=`Concluído: ${salvos} integrante(s) importado(s), ${pulados} já existente(s).`;
-      }catch(e){msg.textContent=`Interrompido após ${salvos} cadastro(s): ${e.message||e}. Confira novamente para continuar.`;console.error(e);}
+      }msg.textContent=`Concluído: ${cultosCriados} culto(s) criado(s), ${salvos} integrante(s) importado(s), ${pulados} já existente(s).`;
+      }catch(e){msg.textContent=`Interrompido após ${cultosCriados} culto(s) e ${salvos} integrante(s): ${e.message||e}. Confira novamente para continuar.`;console.error(e);}
       finally{invalidarImp();btn.disabled=false;await carregarCultos();await carregarEscalaBanda();await carregarEscalaVocal();}
     });
 
