@@ -75,7 +75,7 @@
         <div id="lista-escala-banda">Carregando escala...</div>
         <div id="gerador-banda" hidden style="padding:16px;border:1px solid #dce5ef;border-radius:10px;margin:15px 0;background:#f7faff">
           <h3>Gerador de escala da Banda</h3>
-          <p>Monte uma proposta para o mês, confira e só depois salve. As escalas existentes serão preservadas.</p>
+          <p>Para novembro de 2026, será usada exclusivamente a escala oficial aprovada. Para outros meses, gere uma proposta e confira antes de salvar. As escalas existentes serão preservadas.</p>
           <label for="mes-escala-auto">Mês</label>
           <input id="mes-escala-auto" type="month">
           <button type="button" id="btn-prever-escala">Gerar proposta</button>
@@ -1353,6 +1353,13 @@ mensagem.textContent = erro?.code === '23505'
       const mes = mesAuto.value;
       if (!/^\d{4}-\d{2}$/.test(mes)) {msg.textContent='Escolha um mês.';return;}
       if (el('gerador-banda').hidden) {msg.textContent='Acesso não autorizado.';return;}
+      // Novembro/2026 possui escala oficial aprovada: nunca usar sorteio automático.
+      if (mes === '2026-11') {
+        msg.textContent = 'Novembro de 2026 tem escala oficial aprovada. Confira abaixo antes de cadastrar; nenhuma sugestão automática será gerada.';
+        el('btn-conferir-novembro').click();
+        el('escala-oficial-novembro').scrollIntoView({behavior:'smooth',block:'start'});
+        return;
+      }
       btn.disabled=true;msg.textContent='Preparando proposta...';
       try {
         const [ano, numero] = mes.split('-').map(Number);
